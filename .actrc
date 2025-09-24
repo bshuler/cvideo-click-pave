@@ -1,0 +1,9 @@
+# Act configuration file
+# Use the large image for compatibility with most GitHub Actions
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+
+# Specify the secrets file for act
+--secret-file .secrets
+
+# Set the container architecture
+--container-architecture linux/amd64

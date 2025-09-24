@@ -1,0 +1,98 @@
+name: Terraform Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allows manual triggering via GitHub UI or CLI
+
+permissions:
+  contents: read  # Allows checking out the repository
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Debug - List files (local testing only)
+        if: ${{ env.ACT }}
+        run: |
+          echo "Running locally with act"
+          echo "Current directory:"
+          pwd
+          echo "Files in current directory:"
+          ls -la
+          echo "Looking for pave_infra.tf:"
+          find . -name "*.tf" -type f
+
+      # AWS Authentication - Use access keys for both GitHub and local
+      # Note: This infrastructure repo creates the OIDC role, so we use access keys
+      - name: Configure AWS Credentials (GitHub)
+        if: ${{ !env.ACT }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          echo "AWS credentials configured for GitHub Actions"
+
+      - name: Configure AWS Credentials (Local)
+        if: ${{ env.ACT }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          echo "AWS credentials configured for local testing"
+
+      # Terraform Installation - Use action in GitHub, manual install locally
+      - name: Setup Terraform (GitHub)
+        if: ${{ !env.ACT }}
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.6
+
+      - name: Install Terraform (Local)
+        if: ${{ env.ACT }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y wget unzip
+          wget https://releases.hashicorp.com/terraform/1.5.6/terraform_1.5.6_linux_amd64.zip
+          unzip terraform_1.5.6_linux_amd64.zip
+          sudo mv terraform /usr/local/bin/
+          terraform version
+
+      # Terraform Operations
+      - name: Terraform Init
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: terraform init -input=false
+
+      - name: Terraform Destroy (Local testing only - clean slate)
+        if: ${{ env.ACT }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: terraform destroy -auto-approve -input=false
+        continue-on-error: true
+
+      - name: Terraform Plan
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: terraform plan -input=false
+
+      - name: Terraform Apply
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: terraform apply -auto-approve -input=false
