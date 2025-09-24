@@ -270,6 +270,26 @@ def run_secret_detection() -> Dict[str, Any]:
         r'TEMPLATE.*',  # Templates
         r'bootstrap-credentials',  # Known safe reference
         r'\.pyi',  # Type stub files
+        
+        # File path exclusions for false positives
+        r'/Users/',  # User directories
+        r'/Library/CloudStorage/OneDrive-Personal/',  # OneDrive paths
+        r'file_abs_path',  # JSON structure fields
+        r'definition_context_file_path',  # Checkov report fields
+        r'"path":',  # JSON path fields
+        r'"file_path":',  # JSON file path fields
+        r'"repo_file_path":',  # Repository path fields
+        
+        # Checkov report patterns
+        r'cvideo-click-pave',  # Project name in paths
+        r'BC_AWS_',  # Checkov check IDs
+        r'CKV_AWS_',  # Checkov check IDs
+        r'guideline.*prismacloud\.io',  # Checkov guidelines
+        
+        # JSON structure patterns
+        r'"evaluated_keys":',  # Checkov evaluation fields
+        r'"check_id":',  # Security check identifiers
+        r'"resource":',  # Resource identifiers
     ]
     
     # Directories to exclude

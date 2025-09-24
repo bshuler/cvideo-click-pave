@@ -40,19 +40,43 @@ data "aws_iam_user" "bootstrap_user" {
 # Custom policy for admin user - excludes bootstrap resource management
 resource "aws_iam_policy" "admin_policy" {
   name        = "PaveAdminPolicy"
-  description = "Administrative access excluding bootstrap resource management"
+  description = "Administrative access for infrastructure management with least privilege principles"
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = "*"
+        Effect = "Allow"
+        Action = [
+          # Infrastructure management
+          "cloudformation:*",
+          "lambda:*",
+          "apigateway:*",
+          "s3:*",
+          "logs:*",
+          "dynamodb:*",
+          "ec2:*",
+          
+          # Monitoring and debugging
+          "cloudwatch:*",
+          "xray:*",
+          
+          # Security and compliance (read-only)
+          "iam:Get*",
+          "iam:List*",
+          "sts:AssumeRole",
+          "sts:GetCallerIdentity",
+          
+          # Cost management
+          "ce:*",
+          "budgets:*"
+        ]
         Resource = "*"
       },
       {
         Effect = "Deny"
         Action = [
+          # Prevent bootstrap user modifications
           "iam:DeleteUser",
           "iam:DeleteRole",
           "iam:DeleteUserPolicy",
@@ -65,7 +89,8 @@ resource "aws_iam_policy" "admin_policy" {
           "iam:AttachRolePolicy"
         ]
         Resource = [
-          "arn:aws:iam::*:user/bootstrap-user"
+          "arn:aws:iam::*:user/bootstrap-user",
+          "arn:aws:iam::*:role/bootstrap-*"
         ]
       }
     ]
@@ -96,7 +121,7 @@ resource "aws_iam_user" "developer_user" {
   path = "/"
 }
 
-# Comprehensive developer policy for serverless application development
+# Comprehensive developer policy for serverless application development with constrained permissions
 resource "aws_iam_user_policy" "developer_comprehensive_policy" {
   name = "DeveloperComprehensivePolicy"
   user = aws_iam_user.developer_user.name
@@ -107,15 +132,72 @@ resource "aws_iam_user_policy" "developer_comprehensive_policy" {
       {
         Effect = "Allow"
         Action = [
+          # Serverless development
           "cloudformation:*",
           "lambda:*",
           "apigateway:*",
-          "iam:*",
-          "s3:*",
           "logs:*",
           "dynamodb:*"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          # S3 object management
+          "s3:GetObject*",
+          "s3:PutObject*",
+          "s3:DeleteObject*",
+          "s3:ListBucket"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          # S3 bucket management for application data only
+          "s3:CreateBucket",
+          "s3:DeleteBucket",
+          "s3:GetBucketLocation",
+          "s3:GetBucketVersioning",
+          "s3:PutBucketVersioning"
+        ]
+        Resource = [
+          "arn:aws:s3:::cvideo-*",
+          "arn:aws:s3:::${local.project_name}-*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          # Limited IAM for service roles only
+          "iam:CreateRole",
+          "iam:GetRole",
+          "iam:ListRoles",
+          "iam:PassRole",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy"
+        ]
+        Resource = [
+          "arn:aws:iam::*:role/lambda-*",
+          "arn:aws:iam::*:role/apigateway-*",
+          "arn:aws:iam::*:role/*-execution-role",
+          "arn:aws:iam::*:role/${local.project_name}-*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          # IAM policy management for service roles
+          "iam:CreatePolicy",
+          "iam:GetPolicy",
+          "iam:ListPolicies",
+          "iam:GetPolicyVersion",
+          "iam:ListPolicyVersions"
+        ]
+        Resource = "arn:aws:iam::*:policy/${local.project_name}-*"
       }
     ]
   })
