@@ -88,11 +88,12 @@ def check_github_actions_issues(file_path: Path) -> List[str]:
     return issues
 
 
-def run_yamllint(yaml_files: List[str]) -> bool:
+def run_yamllint(yaml_files: List[str], quiet: bool = False) -> bool:
     """Run yamllint on the provided YAML files.
 
     Args:
         yaml_files: List of YAML file paths to check
+        quiet: Only show failures and final summary
 
     Returns:
         True if all files pass linting, False otherwise
@@ -149,7 +150,8 @@ rules:
 
         success = True
         for yaml_file in yaml_files:
-            print_status("🔍", f"Linting {yaml_file}")
+            if not quiet:
+                print_status("🔍", f"Linting {yaml_file}")
 
             # Run yamllint on the file
             result = subprocess.run(
@@ -164,7 +166,8 @@ rules:
                 print_status("❌", f"Issues found in {yaml_file}:")
                 print(result.stdout)
             else:
-                print_status("✅", f"{yaml_file} passes linting")
+                if not quiet:
+                    print_status("✅", f"{yaml_file} passes linting")
 
             # Also check for GitHub Actions specific issues
             github_issues = check_github_actions_issues(Path(yaml_file))
@@ -172,6 +175,9 @@ rules:
                 print_status("⚠️", f"GitHub Actions suggestions for {yaml_file}:")
                 for issue in github_issues:
                     print(f"  {issue}")
+
+        if success and quiet:
+            print_status("✅", f"All {len(yaml_files)} YAML files pass linting")
 
         return success
 
@@ -192,10 +198,16 @@ def main() -> int:
     parser.add_argument(
         "files", nargs="*", help="Specific files to lint (default: all YAML files)"
     )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Only show failures and final summary",
+    )
 
     args = parser.parse_args()
 
-    if args.fix:
+    if args.fix and not args.quiet:
         print_status(
             "⚠️",
             "yamllint does not support automatic fixing. Use --fix for consistency with other linters.",
@@ -205,13 +217,14 @@ def main() -> int:
     if args.files:
         files = [str(Path(f)) for f in args.files if Path(f).exists()]
         if not files:
-            print_status("❌", "No valid files specified")
+            if not args.quiet:
+                print_status("❌", "No valid files specified")
             return 1
     else:
         files = find_yaml_files()
 
-    # Run yamllint
-    success = run_yamllint(files)
+    # Run yamllint (pass quiet flag to modify behavior)
+    success = run_yamllint(files, quiet=args.quiet)
 
     return 0 if success else 1
 

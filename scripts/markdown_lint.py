@@ -96,10 +96,16 @@ def main():
 
     parser = argparse.ArgumentParser(description="Lint markdown files using mdformat")
     parser.add_argument(
-        "--fix", action="store_true", help="Fix formatting issues automatically"
+        "--fix", action="store_true", help="Automatically fix formatting issues"
     )
     parser.add_argument(
         "--files", nargs="*", help="Specific files to check (default: all .md files)"
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Only show failures and final summary",
     )
 
     args = parser.parse_args()
@@ -110,13 +116,15 @@ def main():
         markdown_files = find_markdown_files()
 
     if not markdown_files:
-        print("📝 No markdown files found.")
+        if not args.quiet:
+            print("📝 No markdown files found.")
         return 0
 
-    print(
-        f"🔍 {'Fixing' if args.fix else 'Checking'} {len(markdown_files)} markdown files..."
-    )
-    print()
+    if not args.quiet:
+        print(
+            f"🔍 {'Fixing' if args.fix else 'Checking'} {len(markdown_files)} markdown files..."
+        )
+        print()
 
     all_valid = True
     results = []
@@ -127,11 +135,14 @@ def main():
         if not is_valid:
             all_valid = False
 
-    # Print results
+    # Print results (only failures in quiet mode)
     for result in results:
-        print(result)
+        if not args.quiet or result.startswith("❌"):
+            print(result)
 
-    print()
+    if not args.quiet:
+        print()
+
     if all_valid:
         print(f"✅ All {len(markdown_files)} markdown files are properly formatted!")
         return 0

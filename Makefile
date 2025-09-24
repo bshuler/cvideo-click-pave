@@ -437,65 +437,36 @@ init: bootstrap-check
 
 # Format Python code with Black
 format:
-	@echo "🎨 Formatting Python code with Black..."
-	@python3 -m black scripts/
-	@echo "✅ Code formatting complete!"
+	@echo "🎨 Formatting code..."
+	@python3 -m black scripts/ --quiet
+	@echo "✅ Code formatting complete"
 
 # Lint Python code with Flake8
 lint:
-	@echo "🔍 Linting Python code with Flake8..."
-	@python3 -m flake8 scripts/
-	@echo "✅ Linting complete!"
+	@echo "🔍 Linting code..."
+	@python3 -m flake8 scripts/ --quiet
+	@echo "✅ Linting complete"
 
 # Type check Python code with mypy
 type-check:
-	@echo "🔍 Type checking Python code with mypy..."
-	@python3 -m mypy scripts/
-	@echo "✅ Type checking complete!"
+	@echo "🔍 Type checking..."
+	@python3 -m mypy scripts/ --no-error-summary
+	@echo "✅ Type checking complete"
 
-# Security scan for secrets and vulnerabilities
+# Professional security scanning with multiple tools
 security:
-	@echo "🔒 Running security scan for secrets and vulnerabilities..."
-	@echo "🔍 Scanning for exposed secrets..."
-	@# Check for common secret patterns in all files except .secrets (which is intentionally excluded)
-	@grep -r -n -E "(aws_access_key_id|aws_secret_access_key|password|secret|token|key)" --include="*.py" --include="*.tf" --include="*.yaml" --include="*.yml" --include="*.json" --include="*.md" --exclude-dir=".git" --exclude-dir=".terraform" . | grep -v "\.secrets" | grep -v -E "(# |#|//|/\*|\*)" || echo "✅ No exposed secrets found in code"
-	@echo "🔍 Checking for hardcoded AWS credentials..."
-	@grep -r -n -E "AKIA[0-9A-Z]{16}" --include="*.py" --include="*.tf" --include="*.yaml" --include="*.yml" --include="*.json" --include="*.md" --exclude-dir=".git" --exclude-dir=".terraform" . | grep -v "\.secrets" || echo "✅ No hardcoded AWS access keys found"
-	@echo "🔍 Checking for sensitive file permissions..."
-	@if [ -f .secrets ]; then \
-		PERMS=$$(stat -f "%A" .secrets 2>/dev/null || stat -c "%a" .secrets 2>/dev/null); \
-		if [ "$$PERMS" != "600" ]; then \
-			echo "⚠️  WARNING: .secrets file has permissions $$PERMS, should be 600"; \
-			chmod 600 .secrets; \
-			echo "🔧 Fixed .secrets permissions to 600"; \
-		else \
-			echo "✅ .secrets file has secure permissions (600)"; \
-		fi; \
-	fi
-	@echo "🔍 Checking .gitignore for sensitive files..."
-	@if ! grep -q "\.secrets" .gitignore; then \
-		echo "⚠️  WARNING: .secrets not in .gitignore"; \
-	else \
-		echo "✅ .secrets properly excluded from git"; \
-	fi
-	@if ! grep -q "\*\.tfstate\|terraform\.tfstate" .gitignore; then \
-		echo "⚠️  WARNING: terraform state files not in .gitignore"; \
-	else \
-		echo "✅ terraform state files properly excluded from git"; \
-	fi
-	@echo "✅ Security scan complete!"
+	@echo "🔒 Running comprehensive security scan..."
+	@mkdir -p logs
+	@python3 scripts/security_scan.py --quiet
+	@echo "✅ Security scan complete"
 
 # Check TypedDict safety with Pylance
 pylance-check:
-	@echo "🔍 Checking TypedDict safety with Pylance..."
-	@python3 scripts/pylance_check_mcp.py
-	@echo "✅ Pylance check complete!"
+	@python3 scripts/pylance_check_mcp.py --quiet
 
 # Lint markdown files
 markdown-lint:
-	@echo "📝 Linting markdown files..."
-	@python3 scripts/markdown_lint.py
-	@echo "✅ Markdown linting complete!"
+	@python3 scripts/markdown_lint.py --quiet
 
 # Fix markdown formatting issues
 markdown-fix:
@@ -505,9 +476,7 @@ markdown-fix:
 
 # Lint YAML files
 yaml-lint:
-	@echo "📝 Linting YAML files..."
-	@python3 scripts/yaml_lint.py
-	@echo "✅ YAML linting complete!"
+	@python3 scripts/yaml_lint.py --quiet
 
 # Fix YAML formatting issues (yamllint doesn't support auto-fix)
 yaml-fix:
@@ -532,6 +501,8 @@ validate: init security format lint type-check pylance-check markdown-lint yaml-
 	else \
 		$(CLEAR_AWS_ENV) && python3 scripts/validate.py; \
 	fi
+	@echo "🏗️  Testing infrastructure health..."
+	@$(MAKE) test-infrastructure
 	@echo "✅ All validations passed!"
 
 # Plan infrastructure changes
@@ -750,7 +721,7 @@ test-workflow:
 # Test deployed AWS infrastructure health
 test-infrastructure:
 	@if [ -f .secrets ]; then \
-		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/test_infrastructure.py; \
+		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/test_infrastructure.py --quiet; \
 	else \
 		echo "❌ No .secrets file found. Run 'make bootstrap-check' or ensure credentials are available."; \
 		exit 1; \

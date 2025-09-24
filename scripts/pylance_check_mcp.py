@@ -8,13 +8,18 @@ For now, it provides a framework and shows the expected integration pattern.
 
 import json
 import sys
+import argparse
 from pathlib import Path
 from typing import Dict, Optional, Any
 
+# Global quiet mode flag
+QUIET_MODE = False
 
-def print_status(emoji: str, message: str) -> None:
+
+def print_status(emoji: str, message: str, force: bool = False) -> None:
     """Print formatted status message."""
-    print(f"{emoji} {message}")
+    if not QUIET_MODE or force:
+        print(f"{emoji} {message}")
 
 
 def collect_pylance_errors() -> Dict[str, Any]:
@@ -168,6 +173,21 @@ def save_results(results: Dict[str, Any], output_file: Optional[Path] = None) ->
 
 def main() -> int:
     """Main entry point."""
+    global QUIET_MODE
+
+    parser = argparse.ArgumentParser(
+        description="Run comprehensive Pylance type checking"
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Only show failures and final summary",
+    )
+    args = parser.parse_args()
+
+    QUIET_MODE = args.quiet
+
     try:
         print_status("🚀", "Starting comprehensive Pylance check...")
 
@@ -178,33 +198,39 @@ def main() -> int:
         typeddict_results = check_typeddict_safety()
 
         # Combine results
+        overall_status_str: str = (
+            "✅ PASS"
+            if general_results["total_errors"] == 0 and typeddict_results["is_safe"]
+            else "❌ FAIL"
+        )
         combined_results = {
             "timestamp": "2025-09-24T16:00:00Z",
             "general_check": general_results,
             "typeddict_check": typeddict_results,
-            "overall_status": (
-                "✅ PASS"
-                if general_results["total_errors"] == 0 and typeddict_results["is_safe"]
-                else "❌ FAIL"
-            ),
+            "overall_status": overall_status_str,
         }
 
-        # Display summary
-        print()
-        print_status("📋", "=== PYLANCE CHECK SUMMARY ===")
-        print(f"   {general_results['summary']}")
-        print(f"   {typeddict_results['summary']}")
-        print(f"   Overall: {combined_results['overall_status']}")
+        # Show summary (always visible)
+        overall_status: str = str(combined_results["overall_status"])
+        if overall_status.startswith("✅"):
+            print_status("✅", "Pylance check passed", force=True)
+        else:
+            print_status("❌", "Pylance check failed", force=True)
+            # Show details only on failure or if not quiet
+            if not QUIET_MODE or not overall_status.startswith("✅"):
+                print_status("📋", "=== PYLANCE CHECK SUMMARY ===", force=True)
+                print(f"   {general_results['summary']}")
+                print(f"   {typeddict_results['summary']}")
+                print(f"   Overall: {combined_results['overall_status']}")
 
         # Save detailed results
         save_results(combined_results)
 
         # Return appropriate exit code
-        overall_status = str(combined_results["overall_status"])
         return 0 if overall_status.startswith("✅") else 1
 
     except Exception as e:
-        print_status("❌", f"Error during Pylance check: {e}")
+        print_status("❌", f"Error during Pylance check: {e}", force=True)
         return 1
 
 

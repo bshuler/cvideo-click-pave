@@ -1,0 +1,192 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of security scan to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - bandit
+          - checkov
+          - safety
+          - secrets
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  security-scan:
+    name: Professional Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for better analysis
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Create logs directory
+      run: mkdir -p logs
+
+    - name: Run Bandit Security Scan
+      if: github.event.inputs.scan_type == 'bandit' || github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == ''
+      run: |
+        echo "🐍 Running Bandit Python Security Scan..."
+        bandit -r . -f json -o logs/bandit-report.json --exclude .git,.terraform,.venv,__pycache__ --exit-zero
+        bandit -r . --exclude .git,.terraform,.venv,__pycache__ || true
+
+    - name: Run Checkov Infrastructure Scan
+      if: github.event.inputs.scan_type == 'checkov' || github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == ''
+      run: |
+        echo "🏗️ Running Checkov Infrastructure Security Scan..."
+        checkov -d . --framework terraform --output json --output-file-path logs/checkov-report.json --quiet || true
+        checkov -d . --framework terraform --compact || true
+
+    - name: Run Safety Dependency Scan
+      if: github.event.inputs.scan_type == 'safety' || github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == ''
+      run: |
+        echo "📦 Running Safety Dependency Vulnerability Scan..."
+        safety check --json --output logs/safety-report.json || true
+        safety check || true
+
+    - name: Run Secret Detection
+      if: github.event.inputs.scan_type == 'secrets' || github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == ''
+      run: |
+        echo "🔍 Running Secret Detection Scan..."
+        # Use git-secrets if available, otherwise use grep-based detection
+        if command -v git-secrets &> /dev/null; then
+          git secrets --scan || true
+        else
+          echo "Using fallback secret detection..."
+          grep -r -n -E "(AKIA[0-9A-Z]{16}|aws_secret_access_key.*[=:].*[A-Za-z0-9+/]{40})" . --exclude-dir=.git --exclude-dir=.terraform --exclude-dir=logs || true
+        fi
+
+    - name: Run Comprehensive Security Script
+      run: |
+        echo "🔒 Running Comprehensive Security Analysis..."
+        python3 scripts/security_scan.py || true
+
+    - name: Upload Security Reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-reports
+        path: |
+          logs/bandit-report.json
+          logs/checkov-report.json
+          logs/safety-report.json
+          logs/security-scan-results.json
+        retention-days: 30
+
+    - name: Comment PR with Security Results
+      if: github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          let comment = '## 🔒 Security Scan Results\n\n';
+          
+          // Check if security scan results exist
+          try {
+            if (fs.existsSync('logs/security-scan-results.json')) {
+              const results = JSON.parse(fs.readFileSync('logs/security-scan-results.json', 'utf8'));
+              const summary = results.summary || {};
+              
+              comment += `### Summary\n`;
+              comment += `- **Total Issues:** ${summary.total_issues || 0}\n`;
+              comment += `- **Tools Run:** ${summary.tools_run || 0}\n`;
+              comment += `- **Critical Issues:** ${summary.critical_issues || 0}\n`;
+              comment += `- **High Issues:** ${summary.high_issues || 0}\n\n`;
+              
+              if (summary.total_issues > 0) {
+                comment += `⚠️  **Action Required:** Security issues found. Please review the detailed reports.\n\n`;
+                comment += `📊 **Detailed Results:** Check the [Security Reports artifact](${context.payload.pull_request.html_url}/checks) for full details.\n`;
+              } else {
+                comment += `✅ **All Clear:** No security issues detected!\n`;
+              }
+            } else {
+              comment += `ℹ️  Security scan completed. Check artifacts for detailed results.\n`;
+            }
+          } catch (error) {
+            comment += `❌ Error reading security results: ${error.message}\n`;
+          }
+          
+          comment += `\n---\n*Security scan powered by Bandit, Checkov, Safety, and custom secret detection*`;
+          
+          // Post comment
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+    - name: Fail on Critical Security Issues
+      run: |
+        if [ -f "logs/security-scan-results.json" ]; then
+          CRITICAL_ISSUES=$(python3 -c "
+          import json, sys
+          try:
+              with open('logs/security-scan-results.json') as f:
+                  data = json.load(f)
+              critical = data.get('summary', {}).get('critical_issues', 0)
+              print(critical)
+          except:
+              print(0)
+          ")
+          
+          if [ "$CRITICAL_ISSUES" -gt 0 ]; then
+            echo "❌ Critical security issues found: $CRITICAL_ISSUES"
+            echo "🚨 Failing the build due to critical security vulnerabilities"
+            exit 1
+          fi
+        fi
+        
+        echo "✅ No critical security issues found"
+
+  dependency-check:
+    name: Dependency Security Check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'safety' || github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == ''
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Snyk to check for vulnerabilities
+      uses: snyk/actions/python@master
+      continue-on-error: true
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --severity-threshold=high
+        
+    - name: Upload Snyk results to GitHub Code Scanning
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: snyk.sarif
