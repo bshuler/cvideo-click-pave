@@ -6,6 +6,9 @@ botocore>=1.31.0
 black>=23.0.0
 flake8>=6.0.0
 mypy>=1.5.0
+mdformat>=0.7.0
+pymarkdownlnt>=0.9.0
+yamllint>=1.35.0
 
 # Type stubs for AWS SDK
 boto3-stubs[essential]>=1.28.0

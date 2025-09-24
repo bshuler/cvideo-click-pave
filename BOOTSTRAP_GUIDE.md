@@ -7,10 +7,10 @@ This guide provides step-by-step instructions for managing the bootstrap user se
 ### Step 1: Get Root Account Access Keys
 
 1. **Log into AWS Console** as the root user (using your AWS account email and password)
-2. **Go to Security Credentials**:
+1. **Go to Security Credentials**:
    - Click on your account name (top right)
    - Select "Security credentials" from dropdown
-3. **Create Access Keys**:
+1. **Create Access Keys**:
    - Scroll down to "Access keys" section
    - Click "Create access key"
    - Select "Command Line Interface (CLI)" use case
@@ -21,7 +21,8 @@ This guide provides step-by-step instructions for managing the bootstrap user se
 
 ### Step 2: Configure AWS CLI with Root Credentials
 
-**Option A: Temporary Environment Variables (Recommended)**
+#### Option A: Temporary Environment Variables (Recommended)
+
 ```bash
 # Export root credentials for this session only
 export AWS_ACCESS_KEY_ID="your_root_access_key_id"
@@ -33,7 +34,8 @@ aws sts get-caller-identity
 # Should show: "arn:aws:iam::ACCOUNT_ID:root"
 ```
 
-**Option B: AWS CLI Profile**
+#### Option B: AWS CLI Profile
+
 ```bash
 # Create a root profile
 aws configure --profile root
@@ -46,7 +48,8 @@ export AWS_PROFILE=root
 aws sts get-caller-identity --profile root
 ```
 
-**Option C: Temporary .secrets file**
+#### Option C: Temporary .secrets file
+
 ```bash
 # Backup current .secrets
 cp .secrets .secrets.backup
@@ -150,27 +153,29 @@ make apply         # Deploy infrastructure
 After completing the bootstrap setup:
 
 1. **Delete Root Access Keys**:
+
    ```bash
    # List root access keys
    aws iam list-access-keys --profile root
-   
+
    # Delete the root access keys
    aws iam delete-access-key --access-key-id YOUR_ROOT_KEY_ID --profile root
    ```
 
-2. **Remove Root Credentials from CLI**:
+1. **Remove Root Credentials from CLI**:
+
    ```bash
    # Clear environment variables
    unset AWS_ACCESS_KEY_ID
    unset AWS_SECRET_ACCESS_KEY
    unset AWS_PROFILE
-   
+
    # Remove root profile (if used)
    aws configure --profile root
    # Enter empty values to clear
    ```
 
-3. **Enable MFA on Root Account** (via AWS Console)
+1. **Enable MFA on Root Account** (via AWS Console)
 
 ### Bootstrap User Security
 
@@ -187,18 +192,21 @@ The new bootstrap setup includes:
 If you get access denied errors during bootstrap operations:
 
 1. **Verify Root Access**:
+
    ```bash
    aws sts get-caller-identity
    # Must show: "arn:aws:iam::ACCOUNT_ID:root"
    ```
 
-2. **Check Region**:
+1. **Check Region**:
+
    ```bash
    echo $AWS_DEFAULT_REGION
    # Should be: us-east-1
    ```
 
-3. **Test Root Permissions**:
+1. **Test Root Permissions**:
+
    ```bash
    aws iam list-users
    aws s3 ls
@@ -209,11 +217,13 @@ If you get access denied errors during bootstrap operations:
 If resources already exist:
 
 1. **Run destroy first**:
+
    ```bash
    make bootstrap-destroy
    ```
 
-2. **Then recreate**:
+1. **Then recreate**:
+
    ```bash
    make bootstrap-create
    ```
@@ -223,12 +233,12 @@ If resources already exist:
 If you get locked out completely:
 
 1. **Use AWS Console** with root account
-2. **Manually delete resources**:
+1. **Manually delete resources**:
    - IAM > Users > bootstrap-user (delete)
    - IAM > Roles > PaveBootstrapRole (delete)
    - IAM > Policies > BootstrapTerraformPolicy (delete)
    - IAM > Policies > PaveBootstrapPolicy (delete)
-3. **Run bootstrap-create** with root credentials
+1. **Run bootstrap-create** with root credentials
 
 ## 📋 Quick Reference Commands
 

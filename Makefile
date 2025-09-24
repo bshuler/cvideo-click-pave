@@ -23,7 +23,7 @@ LOAD_BOOTSTRAP_CREDS = $(CLEAR_AWS_ENV) && set -a && source .secrets && set +a
         bootstrap-check bootstrap-create bootstrap-destroy bootstrap-fix bootstrap-switch bootstrap-reset-help bootstrap-root-help credential-info \
         init plan apply destroy clean credentials setup-github \
         state-show state-pull state-backup state-import \
-        format lint type-check security pylance-check validate \
+        format lint type-check security pylance-check markdown-lint markdown-fix yaml-lint yaml-fix validate \
         test test-workflow test-infrastructure test-act test-local \
         full-test full-test-help \
         dev-deploy dev-clean status clean-local \
@@ -82,6 +82,10 @@ help:
 	@echo "  make type-check    Type check with mypy"
 	@echo "  make security      Security scan for secrets and vulnerabilities"
 	@echo "  make pylance-check Check TypedDict safety with Pylance"
+	@echo "  make markdown-lint Lint markdown files with mdformat"
+	@echo "  make markdown-fix  Fix markdown formatting issues"
+	@echo "  make yaml-lint     Lint YAML files with yamllint"
+	@echo "  make yaml-fix      Validate YAML files (no auto-fix available)"
 	@echo "  make validate      Validate terraform configuration and Python code"
 	@echo ""
 	@echo "🛠️ DEVELOPMENT WORKFLOW:"
@@ -487,8 +491,32 @@ pylance-check:
 	@python3 scripts/pylance_check_mcp.py
 	@echo "✅ Pylance check complete!"
 
+# Lint markdown files
+markdown-lint:
+	@echo "📝 Linting markdown files..."
+	@python3 scripts/markdown_lint.py
+	@echo "✅ Markdown linting complete!"
+
+# Fix markdown formatting issues
+markdown-fix:
+	@echo "🔧 Fixing markdown formatting issues..."
+	@python3 scripts/markdown_lint.py --fix
+	@echo "✅ Markdown formatting fixed!"
+
+# Lint YAML files
+yaml-lint:
+	@echo "📝 Linting YAML files..."
+	@python3 scripts/yaml_lint.py
+	@echo "✅ YAML linting complete!"
+
+# Fix YAML formatting issues (yamllint doesn't support auto-fix)
+yaml-fix:
+	@echo "🔧 YAML files need manual fixing (yamllint doesn't support auto-fix)..."
+	@python3 scripts/yaml_lint.py --fix
+	@echo "✅ YAML validation complete!"
+
 # Validate configuration and dependencies
-validate: init security format lint type-check pylance-check
+validate: init security format lint type-check pylance-check markdown-lint yaml-lint
 	@echo "🔍 Validating configuration..."
 	@echo "📋 Checking Terraform configuration..."
 	@if [ -f .secrets ]; then \

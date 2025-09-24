@@ -1,5 +1,9 @@
 name: Terraform Infrastructure
 
+# Note: This workflow uses env.ACT to detect when running locally with the Act tool.
+# VS Code may show warnings for env.ACT as it's not a standard GitHub environment variable,
+# but this is the documented pattern for Act detection. See: https://nektosact.com/usage/index.html
+
 on:
   push:
     branches:

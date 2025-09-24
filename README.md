@@ -36,13 +36,13 @@ This repository provides **Infrastructure as Code (IaC)** for AWS using Terrafor
    make bootstrap-root-help
    ```
 
-2. **Create Bootstrap Infrastructure**:
+1. **Create Bootstrap Infrastructure**:
 
    ```bash
    make bootstrap-create
    ```
 
-3. **Switch to Bootstrap User**:
+1. **Switch to Bootstrap User**:
 
    ```bash
    make bootstrap-switch
@@ -140,7 +140,6 @@ make test-infrastructure
 
 ## 📂 Project Structure
 
-```
 ```text
 ├── .github/workflows/
 │   └── terraform.yaml         # Unified intelligent workflow
@@ -199,11 +198,11 @@ make full-test YES=1
 This runs:
 
 1. Complete cleanup
-2. Fresh bootstrap setup
-3. Infrastructure deployment
-4. Credential generation
-5. GitHub secrets configuration
-6. Comprehensive testing (local, Act, GitHub Actions)
+1. Fresh bootstrap setup
+1. Infrastructure deployment
+1. Credential generation
+1. GitHub secrets configuration
+1. Comprehensive testing (local, Act, GitHub Actions)
 
 ### Individual Tests
 
@@ -260,9 +259,9 @@ make dev-deploy
 ### Common Issues
 
 1. **Bootstrap Setup**: Run `make bootstrap-check` to validate
-2. **Credentials**: Use `make credential-info` for status
-3. **State Issues**: Use `make state-pull` to sync
-4. **Permission Errors**: Verify AWS credentials with `make bootstrap-check`
+1. **Credentials**: Use `make credential-info` for status
+1. **State Issues**: Use `make state-pull` to sync
+1. **Permission Errors**: Verify AWS credentials with `make bootstrap-check`
 
 ### Getting Help
 
@@ -296,17 +295,17 @@ make bootstrap-fix          # Fix S3 permissions
 ## 💡 Best Practices
 
 1. **Always run validation**: `make validate` before commits
-2. **Use full test pipeline**: `make full-test` for comprehensive validation
-3. **Monitor credentials**: Regular `make credential-info` checks
-4. **Backup state**: `make state-backup` before major changes
-5. **Clean deployments**: Use `make dev-deploy` for clean slate testing
+1. **Use full test pipeline**: `make full-test` for comprehensive validation
+1. **Monitor credentials**: Regular `make credential-info` checks
+1. **Backup state**: `make state-backup` before major changes
+1. **Clean deployments**: Use `make dev-deploy` for clean slate testing
 
 ## 🤝 Contributing
 
 1. **Code Quality**: All changes must pass `make validate`
-2. **Testing**: Use `make full-test` to verify end-to-end functionality
-3. **Documentation**: Update relevant `.md` files
-4. **Security**: Run `make security` to check for exposed secrets
+1. **Testing**: Use `make full-test` to verify end-to-end functionality
+1. **Documentation**: Update relevant `.md` files
+1. **Security**: Run `make security` to check for exposed secrets
 
 ## 📋 System Requirements
 
@@ -317,6 +316,6 @@ make bootstrap-fix          # Fix S3 permissions
 - **Docker**: Required for Act testing
 - **Git**: Required for GitHub integration
 
----
+______________________________________________________________________
 
 **🎯 Ready to get started?** Run `make help` to see all available commands!

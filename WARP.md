@@ -116,7 +116,7 @@ terraform output cicd_role_arn
 Before deploying, update these placeholders:
 
 1. Line 115: Replace `your-org/your-repo` with actual GitHub organization/repository
-2. Lines 148-149: Replace `your-app-bucket` with actual application S3 bucket name
+1. Lines 148-149: Replace `your-app-bucket` with actual application S3 bucket name
 
 ## Security Considerations
 

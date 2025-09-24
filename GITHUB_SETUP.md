@@ -7,9 +7,9 @@ To enable the GitHub Actions workflow, you need to configure the following secre
 ### How to Add Secrets
 
 1. Go to your GitHub repository: <https://github.com/bshuler/cvideo-click-pave>
-2. Click on **Settings** (top menu)
-3. In the left sidebar, click **Secrets and variables** → **Actions**  
-4. Click **New repository secret** for each of the following:
+1. Click on **Settings** (top menu)
+1. In the left sidebar, click **Secrets and variables** → **Actions**
+1. Click **New repository secret** for each of the following:
 
 ### Required Secrets
 
@@ -32,9 +32,9 @@ To enable the GitHub Actions workflow, you need to configure the following secre
 Once you've added all three secrets:
 
 1. The workflow will automatically run on pushes to the `main` branch
-2. You can also manually trigger it from the Actions tab
-3. The workflow will authenticate to AWS and deploy/update the infrastructure
-4. Check the Actions tab for workflow run status and logs
+1. You can also manually trigger it from the Actions tab
+1. The workflow will authenticate to AWS and deploy/update the infrastructure
+1. Check the Actions tab for workflow run status and logs
 
 ### Troubleshooting
 
@@ -46,7 +46,7 @@ Once you've added all three secrets:
 
 - Bootstrap User: `bootstrap-user`
 - Admin User: `admin-user`
-- Developer User: `developer-user`  
+- Developer User: `developer-user`
 - CICD Role: `CICDDeploymentRole`
 - State Bucket: `pave-tf-state-bucket-us-east-1`
 
