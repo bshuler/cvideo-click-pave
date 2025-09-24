@@ -90,7 +90,7 @@ def get_aws_resources():
 
 def main():
     """Main status check."""
-    print_status("📊", "CVVideo Click Pave - Infrastructure Status")
+    print_status("📊", "CVideo Click Pave - Infrastructure Status")
     print()
 
     # Local status

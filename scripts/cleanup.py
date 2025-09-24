@@ -79,7 +79,7 @@ def find_pave_users(iam_client: Any) -> List[str]:
         for user in response["Users"]:
             username = user["UserName"]
             # NEVER delete bootstrap user
-            if username == "pave-bootstrap-user":
+            if username == "bootstrap-user":
                 continue
 
             # Match exact names and patterns from all deployments
@@ -486,7 +486,7 @@ def main() -> None:
     print(f"  - S3 Buckets: {len(buckets)}")
     print()
     print_status("🔒", "Bootstrap resources are protected and will NEVER be deleted:")
-    print("  - User: pave-bootstrap-user")
+    print("  - User: bootstrap-user")
     print("  - Role: PaveBootstrapRole")
     print("  - Policy: PaveBootstrapPolicy")
     print()

@@ -17,7 +17,7 @@ This repository contains Terraform infrastructure as code for AWS resource provi
 2. **Create Bootstrap User** (in IAM Console > Users):
 
    ```text
-   User Name: pave-bootstrap-user
+   User Name: bootstrap-user
    Access type: Programmatic access
    ```
 
@@ -34,17 +34,17 @@ This repository contains Terraform infrastructure as code for AWS resource provi
    ```text
    Policy Name: PaveBootstrapPolicy
    Permissions:
-   - Full IAM access EXCEPT cannot delete pave-bootstrap-user or PaveBootstrapRole
+   - Full IAM access EXCEPT cannot delete bootstrap-user or PaveBootstrapRole
    - Full S3 access
    - Full Lambda access  
    - Full EC2 access
    ```
 
 5. **Attach Policy to Bootstrap User**:
-   - Attach `PaveBootstrapPolicy` to `pave-bootstrap-user`
+   - Attach `PaveBootstrapPolicy` to `bootstrap-user`
 
 6. **Generate Access Keys**:
-   - Create access key for `pave-bootstrap-user`
+   - Create access key for `bootstrap-user`
    - Save the Access Key ID and Secret Access Key securely
 
 7. **Configure Repository Secrets**:
@@ -65,7 +65,7 @@ This repository contains Terraform infrastructure as code for AWS resource provi
 
 - **Unified Workflow**: Single GitHub Actions workflow that intelligently adapts to local (Act) and production (GitHub Actions) environments
 - **Smart Authentication**: Uses access key authentication for both local and GitHub Actions (simplified approach)
-- **Unique Resource Naming**: Uses random suffixes to prevent naming conflicts across deployments
+- **Consistent Resource Naming**: Uses predictable naming for clean resource management across deployments
 - **Clean State Management**: Local testing includes destroy step for clean slate deployments
 - **Comprehensive IAM**: Separate users and roles for admin, developers, and CI/CD with appropriate permissions
 - **Credential Management**: Smart scripts for extracting and setting up credentials securely
@@ -126,12 +126,12 @@ This project provisions AWS infrastructure for:
 - **Developer Permissions**: S3 Full Access + Lambda Full Access + EC2 Read Only
 - **CI/CD Permissions**: S3 Full Access + Lambda Full Access + Custom S3 bucket policies
 
-### Unique Resource Naming
+### Consistent Resource Naming
 
-All resources use random suffixes (e.g., `ef47b899`) to prevent conflicts:
-- Multiple deployments can coexist
-- Clean separation between environments
-- No naming collision issues
+All resources use predictable naming conventions:
+- Clean, readable resource names
+- Consistent across all deployments
+- S3 backend shared across all deployment methods
 
 ## 🚀 Getting Started
 
@@ -561,7 +561,7 @@ gh auth status
 
 ### Multiple Environments
 
-Each deployment creates unique resources with random suffixes, allowing multiple environments:
+Each deployment uses consistent resource naming with shared state management:
 
 ```bash
 # Deploy to dev environment  

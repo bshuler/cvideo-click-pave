@@ -41,12 +41,7 @@ resource "aws_s3_bucket_versioning" "tf_state_versioning" {
 
 # Data source to verify bootstrap user exists (fails if not found)
 data "aws_iam_user" "bootstrap_user" {
-  user_name = "pave-bootstrap-user"
-}
-
-# Data source to verify bootstrap role exists (fails if not found)
-data "aws_iam_role" "bootstrap_role" {
-  name = "PaveBootstrapRole"
+  user_name = "bootstrap-user"
 }
 
 # Custom policy for admin user - excludes bootstrap resource management
@@ -77,8 +72,7 @@ resource "aws_iam_policy" "admin_policy" {
           "iam:AttachRolePolicy"
         ]
         Resource = [
-          "arn:aws:iam::*:user/pave-bootstrap-user",
-          "arn:aws:iam::*:role/PaveBootstrapRole"
+          "arn:aws:iam::*:user/bootstrap-user"
         ]
       }
     ]

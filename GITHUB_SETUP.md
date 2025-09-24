@@ -23,7 +23,7 @@ To enable the GitHub Actions workflow, you need to configure the following secre
 
 - These credentials provide **full administrator access** to the AWS account
 - Only use these for infrastructure deployment in this repository
-- The credentials are scoped to the `admin-user-ef47b899` IAM user
+- The credentials are scoped to the `admin-user` IAM user
 - Consider rotating these keys periodically
 - Never commit these values to code - only use as repository secrets
 
@@ -39,14 +39,15 @@ Once you've added all three secrets:
 ### Troubleshooting
 
 - If the workflow fails with authentication errors, verify all three secrets are set correctly
-- If you see permission errors, ensure the `admin-user-ef47b899` user still exists and has admin permissions
+- If you see permission errors, ensure the `admin-user` user still exists and has admin permissions
 - Check the Actions tab for detailed error logs
 
 ### Current Infrastructure State
 
-- Admin User: `admin-user-ef47b899`
-- Developer User: `developer-user-ef47b899`  
-- CICD Role: `CICDDeploymentRole-ef47b899`
-- State Bucket: `pave-tf-state-bucket-***-ef47b899`
+- Bootstrap User: `bootstrap-user`
+- Admin User: `admin-user`
+- Developer User: `developer-user`  
+- CICD Role: `CICDDeploymentRole`
+- State Bucket: `pave-tf-state-bucket-us-east-1`
 
 The workflow is now configured to use access key authentication instead of OIDC, making it suitable for this infrastructure bootstrap repository.

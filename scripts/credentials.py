@@ -389,7 +389,8 @@ def main() -> None:
     print()
     print_status("🔒", "Security Notes:")
     print("  - These files are in .gitignore to prevent accidental commits")
-    print("  - Copy credentials/developer.env to your next code repository")
+    print("  - Use admin.env for full infrastructure management")
+    print("  - Use developer.env for limited infrastructure access")
     print("  - Never commit these credentials to version control")
     print("  - Consider rotating keys periodically")
 
@@ -398,8 +399,11 @@ def main() -> None:
         print_status("💡", "Manual Setup Required:")
         print("- Replace placeholder values in credential files")
         print("- Use AWS Console > IAM > Users > Security credentials")
-        print("- Admin credentials: infrastructure management only")
-        print("- Developer credentials: application development")
+        print("- Admin credentials: full infrastructure management access")
+        print(
+            "- Developer credentials: limited infrastructure access "
+            "(S3, Lambda, EC2 read-only)"
+        )
 
 
 if __name__ == "__main__":

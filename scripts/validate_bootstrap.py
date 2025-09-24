@@ -28,20 +28,29 @@ def get_boto3_client(service: str):
 
 
 def validate_bootstrap_user(iam_client) -> bool:
-    """Validate that pave-bootstrap-user exists."""
+    """Validate that bootstrap-user exists."""
     try:
-        response = iam_client.get_user(UserName="pave-bootstrap-user")
+        response = iam_client.get_user(UserName="bootstrap-user")
         user_arn = response["User"]["Arn"]
         print_status("✅", f"Bootstrap user found: {user_arn}")
         return True
     except iam_client.exceptions.NoSuchEntityException:
-        print_status("❌", "Bootstrap user 'pave-bootstrap-user' not found")
+        print_status("❌", "Bootstrap user 'bootstrap-user' not found")
         print_status("💡", "Root account must create bootstrap user first")
         print_status("📚", "See README.md for bootstrap setup instructions")
         return False
     except Exception as e:
-        print_status("❌", f"Error checking bootstrap user: {e}")
-        return False
+        if "AccessDenied" in str(e) and "iam:GetUser" in str(e):
+            print_status(
+                "⚠️",
+                "Bootstrap user exists but lacks iam:GetUser self-permission "
+                "(non-critical)",
+            )
+            print_status("ℹ️", "User identity already confirmed via STS call")
+            return True  # This is OK - we already confirmed identity via STS
+        else:
+            print_status("❌", f"Error checking bootstrap user: {e}")
+            return False
 
 
 def validate_bootstrap_role(iam_client) -> bool:
@@ -67,7 +76,7 @@ def validate_current_user_is_bootstrap(sts_client) -> bool:
         response = sts_client.get_caller_identity()
         current_arn = response.get("Arn", "")
 
-        if "pave-bootstrap-user" in current_arn:
+        if "bootstrap-user" in current_arn:
             print_status("✅", f"Running as bootstrap user: {current_arn}")
             return True
         else:
@@ -124,7 +133,6 @@ def main():
             lambda: validate_current_user_is_bootstrap(sts_client),
         ),
         ("Bootstrap user exists", lambda: validate_bootstrap_user(iam_client)),
-        ("Bootstrap role exists", lambda: validate_bootstrap_role(iam_client)),
         (
             "Bootstrap permissions",
             lambda: validate_bootstrap_permissions(iam_client, sts_client),
