@@ -222,17 +222,21 @@ AWS_DEFAULT_REGION=us-east-1
 """
 
     # Developer credentials
-    developer_content = f"""# Developer user credentials - Limited AWS access for
-# application development
+    developer_content = f"""# Developer user credentials - Comprehensive serverless development access
 # Created: {timestamp}
 # Use these in your next code repository for application development
 AWS_ACCESS_KEY_ID={creds['developer_access_key']}
 AWS_SECRET_ACCESS_KEY={creds['developer_secret_key']}
 AWS_DEFAULT_REGION=us-east-1
 
-# Permissions include:
-# - Amazon S3 Full Access (for file storage, static websites)
+# Comprehensive Serverless Development Permissions:
+# - CloudFormation Full Access (for infrastructure as code)
 # - AWS Lambda Full Access (for serverless functions)
+# - API Gateway Full Access (for REST API management)
+# - IAM Full Access (for role and policy management)
+# - Amazon S3 Full Access (for file storage, static websites)
+# - CloudWatch Logs Full Access (for monitoring and debugging)
+# - DynamoDB Full Access (for NoSQL database operations)
 # - Amazon EC2 Read Only Access (for viewing instances)
 """
 
@@ -318,8 +322,7 @@ AWS_DEFAULT_REGION=us-east-1
         developer_key if developer_key != "None" else "REPLACE_WITH_ACTUAL_ACCESS_KEY"
     )
 
-    developer_content = f"""# Developer user credentials - Limited AWS access for
-# application development
+    developer_content = f"""# Developer user credentials - Comprehensive serverless development access
 # User: {developer_user}
 # Created: {timestamp}
 #
@@ -328,9 +331,14 @@ AWS_DEFAULT_REGION=us-east-1
 # > Access keys
 # {developer_access_key_instruction} and enter the values below:
 #
-# Permissions include:
-# - Amazon S3 Full Access (for file storage, static websites)
+# Comprehensive Serverless Development Permissions:
+# - CloudFormation Full Access (for infrastructure as code)
 # - AWS Lambda Full Access (for serverless functions)
+# - API Gateway Full Access (for REST API management)
+# - IAM Full Access (for role and policy management)
+# - Amazon S3 Full Access (for file storage, static websites)
+# - CloudWatch Logs Full Access (for monitoring and debugging)
+# - DynamoDB Full Access (for NoSQL database operations)
 # - Amazon EC2 Read Only Access (for viewing instances)
 #
 AWS_ACCESS_KEY_ID={developer_access_key_value}

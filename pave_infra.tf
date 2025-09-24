@@ -96,16 +96,32 @@ resource "aws_iam_user" "developer_user" {
   path = "/"
 }
 
-resource "aws_iam_user_policy_attachment" "developer_s3_policy" {
-  user       = aws_iam_user.developer_user.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+# Comprehensive developer policy for serverless application development
+resource "aws_iam_user_policy" "developer_comprehensive_policy" {
+  name = "DeveloperComprehensivePolicy"
+  user = aws_iam_user.developer_user.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudformation:*",
+          "lambda:*",
+          "apigateway:*",
+          "iam:*",
+          "s3:*",
+          "logs:*",
+          "dynamodb:*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 }
 
-resource "aws_iam_user_policy_attachment" "developer_lambda_policy" {
-  user       = aws_iam_user.developer_user.name
-  policy_arn = "arn:aws:iam::aws:policy/AWSLambda_FullAccess"
-}
-
+# Keep EC2 read-only access for viewing instances
 resource "aws_iam_user_policy_attachment" "developer_ec2_policy" {
   user       = aws_iam_user.developer_user.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess"

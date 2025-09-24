@@ -122,6 +122,125 @@ def test_secrets_manager():
         return False
 
 
+def test_developer_permissions():
+    """Test comprehensive developer user permissions for serverless development"""
+    print("🔍 Testing developer user comprehensive permissions...")
+    
+    # Get developer credentials from terraform outputs
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["terraform", "output", "-json"], 
+            capture_output=True, 
+            text=True, 
+            cwd="."
+        )
+        if result.returncode != 0:
+            print("⚠️  Could not get terraform outputs - testing with current credentials")
+            return test_current_user_permissions()
+        
+        import json
+        outputs = json.loads(result.stdout)
+        dev_access_key = outputs.get("developer_user_access_key", {}).get("value")
+        dev_secret_key = outputs.get("developer_user_secret_key", {}).get("value")
+        
+        if not dev_access_key or not dev_secret_key:
+            print("⚠️  Could not get developer credentials - testing with current credentials")
+            return test_current_user_permissions()
+        
+        # Test with developer credentials
+        session = boto3.Session(
+            aws_access_key_id=dev_access_key,
+            aws_secret_access_key=dev_secret_key,
+            region_name="us-east-1"
+        )
+        
+        return test_permissions_with_session(session, "developer")
+        
+    except Exception as e:
+        print(f"⚠️  Error setting up developer session: {e}")
+        print("Testing with current credentials instead...")
+        return test_current_user_permissions()
+
+
+def test_current_user_permissions():
+    """Test permissions with current user credentials"""
+    session = boto3.Session()
+    return test_permissions_with_session(session, "current user")
+
+
+def test_permissions_with_session(session, user_type):
+    """Test comprehensive serverless permissions with given session"""
+    print(f"🔍 Testing {user_type} serverless development permissions...")
+    
+    success = True
+    
+    # Test CloudFormation permissions
+    try:
+        cf = session.client("cloudformation")
+        cf.list_stacks()
+        print(f"✅ CloudFormation access verified for {user_type}")
+    except Exception as e:
+        print(f"❌ CloudFormation access failed for {user_type}: {e}")
+        success = False
+    
+    # Test Lambda permissions
+    try:
+        lambda_client = session.client("lambda")
+        lambda_client.list_functions(MaxItems=1)
+        print(f"✅ Lambda access verified for {user_type}")
+    except Exception as e:
+        print(f"❌ Lambda access failed for {user_type}: {e}")
+        success = False
+    
+    # Test API Gateway permissions
+    try:
+        apigw = session.client("apigateway")
+        apigw.get_rest_apis(limit=1)
+        print(f"✅ API Gateway access verified for {user_type}")
+    except Exception as e:
+        print(f"❌ API Gateway access failed for {user_type}: {e}")
+        success = False
+    
+    # Test IAM permissions (read operations)
+    try:
+        iam = session.client("iam")
+        iam.list_roles(MaxItems=1)
+        print(f"✅ IAM access verified for {user_type}")
+    except Exception as e:
+        print(f"❌ IAM access failed for {user_type}: {e}")
+        success = False
+    
+    # Test S3 permissions
+    try:
+        s3 = session.client("s3")
+        s3.list_buckets()
+        print(f"✅ S3 access verified for {user_type}")
+    except Exception as e:
+        print(f"❌ S3 access failed for {user_type}: {e}")
+        success = False
+    
+    # Test CloudWatch Logs permissions
+    try:
+        logs = session.client("logs")
+        logs.describe_log_groups(limit=1)
+        print(f"✅ CloudWatch Logs access verified for {user_type}")
+    except Exception as e:
+        print(f"❌ CloudWatch Logs access failed for {user_type}: {e}")
+        success = False
+    
+    # Test DynamoDB permissions
+    try:
+        dynamodb = session.client("dynamodb")
+        dynamodb.list_tables(Limit=1)
+        print(f"✅ DynamoDB access verified for {user_type}")
+    except Exception as e:
+        print(f"❌ DynamoDB access failed for {user_type}: {e}")
+        success = False
+    
+    return success
+
+
 def main():
     """Run all infrastructure tests"""
     print("🏗️  Testing deployed AWS infrastructure...")
@@ -135,6 +254,7 @@ def main():
         test_iam_resources,
         test_s3_backend,
         test_secrets_manager,
+        test_developer_permissions,
     ]
 
     for test in tests:
