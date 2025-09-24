@@ -8,6 +8,7 @@ so you can start fresh with proper setup.
 CRITICAL: This must be run with AWS root account or admin credentials.
 """
 
+import argparse
 import boto3
 import sys
 from botocore.exceptions import ClientError
@@ -200,20 +201,62 @@ def delete_bootstrap_policies(iam_client):
     return True
 
 
+def delete_credentials_from_secrets_manager(region="us-east-1"):
+    """Delete bootstrap credentials from AWS Secrets Manager."""
+    secret_name = "pave/bootstrap-credentials"
+
+    try:
+        secrets_client = boto3.client("secretsmanager", region_name=region)
+
+        try:
+            # Delete the secret immediately (no recovery period)
+            secrets_client.delete_secret(
+                SecretId=secret_name, ForceDeleteWithoutRecovery=True
+            )
+            print_status(
+                "✅",
+                f"Deleted bootstrap credentials from Secrets Manager: {secret_name}",
+            )
+            return True
+
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code == "ResourceNotFoundException":
+                print_status(
+                    "ℹ️",
+                    f"No bootstrap credentials found in Secrets Manager: {secret_name}",
+                )
+                return True
+            else:
+                print_status("❌", f"Error deleting secret from Secrets Manager: {e}")
+                return False
+
+    except Exception as e:
+        print_status("❌", f"Error connecting to Secrets Manager: {e}")
+        return False
+
+
 def main():
     """Main destruction workflow."""
+    parser = argparse.ArgumentParser(description="Destroy bootstrap user setup")
+    parser.add_argument(
+        "--skip-confirm", action="store_true", help="Skip confirmation prompts"
+    )
+    args = parser.parse_args()
+
     print_status("💥", "DESTROYING Bootstrap User Setup")
     print_status("⚠️", "This will completely remove all bootstrap resources!")
     print_status("⚠️", "Make sure you're running with root/admin credentials")
     print()
 
     # Confirmation
-    confirm = input(
-        "Are you sure you want to destroy the bootstrap setup? (type 'yes'): "
-    )
-    if confirm.lower() != "yes":
-        print_status("❌", "Destruction cancelled")
-        sys.exit(0)
+    if not args.skip_confirm:
+        confirm = input(
+            "Are you sure you want to destroy the bootstrap setup? (type 'yes'): "
+        )
+        if confirm.lower() != "yes":
+            print_status("❌", "Destruction cancelled")
+            sys.exit(0)
 
     try:
         iam_client = boto3.client("iam")
@@ -229,16 +272,20 @@ def main():
 
         print()
 
-        # Step 1: Delete bootstrap user
-        print_status("1️⃣", "Deleting bootstrap user...")
+        # Step 1: Delete credentials from Secrets Manager
+        print_status("1️⃣", "Deleting credentials from AWS Secrets Manager...")
+        delete_credentials_from_secrets_manager()
+
+        # Step 2: Delete bootstrap user
+        print_status("2️⃣", "Deleting bootstrap user...")
         delete_bootstrap_user(iam_client)
 
-        # Step 2: Delete bootstrap role
-        print_status("2️⃣", "Deleting bootstrap role...")
+        # Step 3: Delete bootstrap role
+        print_status("3️⃣", "Deleting bootstrap role...")
         delete_bootstrap_role(iam_client)
 
-        # Step 3: Delete bootstrap policies
-        print_status("3️⃣", "Deleting bootstrap policies...")
+        # Step 4: Delete bootstrap policies
+        print_status("4️⃣", "Deleting bootstrap policies...")
         delete_bootstrap_policies(iam_client)
 
         print()

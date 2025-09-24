@@ -168,6 +168,30 @@ def create_bootstrap_role(iam_client, bootstrap_user_arn: str):
             return None
 
 
+def cleanup_existing_access_keys(iam_client, user_name: str):
+    """Clean up existing access keys for a user to prevent limit issues."""
+    try:
+        response = iam_client.list_access_keys(UserName=user_name)
+        access_keys = response.get("AccessKeyMetadata", [])
+
+        if access_keys:
+            print_status(
+                "🔍", f"Found {len(access_keys)} existing access key(s) for {user_name}"
+            )
+            for key in access_keys:
+                key_id = key["AccessKeyId"]
+                iam_client.delete_access_key(UserName=user_name, AccessKeyId=key_id)
+                print_status("🗑️", f"Deleted existing access key: {key_id}")
+        else:
+            print_status("ℹ️", f"No existing access keys found for {user_name}")
+
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "NoSuchEntity":
+            print_status("ℹ️", f"User {user_name} does not exist yet")
+        else:
+            print_status("❌", f"Error checking access keys: {e}")
+
+
 def create_bootstrap_user(iam_client):
     """Create the bootstrap-user."""
     user_name = "bootstrap-user"
@@ -230,30 +254,274 @@ def create_access_key(iam_client, user_name: str):
         return None
 
 
+def create_s3_backend_bucket(region="us-east-1"):
+    """Create S3 bucket for Terraform backend if it doesn't exist."""
+    bucket_name = "pave-tf-state-bucket-us-east-1"
+
+    try:
+        s3_client = boto3.client("s3", region_name=region)
+
+        # Check if bucket already exists
+        try:
+            s3_client.head_bucket(Bucket=bucket_name)
+            print_status("ℹ️", f"S3 backend bucket already exists: {bucket_name}")
+            return True
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code != "404":  # Not a "bucket doesn't exist" error
+                print_status("❌", f"Error checking bucket: {e}")
+                return False
+
+        # Create the bucket
+        try:
+            if region == "us-east-1":
+                # For us-east-1, don't specify LocationConstraint
+                s3_client.create_bucket(Bucket=bucket_name)
+            else:
+                # For other regions, specify LocationConstraint
+                s3_client.create_bucket(
+                    Bucket=bucket_name,
+                    CreateBucketConfiguration={
+                        "LocationConstraint": region
+                    },  # type: ignore
+                )
+
+            print_status("✅", f"Created S3 backend bucket: {bucket_name}")
+
+            # Enable versioning for state file safety
+            s3_client.put_bucket_versioning(
+                Bucket=bucket_name, VersioningConfiguration={"Status": "Enabled"}
+            )
+            print_status("✅", "Enabled versioning on S3 backend bucket")
+
+            # Enable server-side encryption
+            s3_client.put_bucket_encryption(
+                Bucket=bucket_name,
+                ServerSideEncryptionConfiguration={
+                    "Rules": [
+                        {
+                            "ApplyServerSideEncryptionByDefault": {
+                                "SSEAlgorithm": "AES256"
+                            }
+                        }
+                    ]
+                },
+            )
+            print_status("✅", "Enabled encryption on S3 backend bucket")
+
+            # Block public access
+            s3_client.put_public_access_block(
+                Bucket=bucket_name,
+                PublicAccessBlockConfiguration={
+                    "BlockPublicAcls": True,
+                    "IgnorePublicAcls": True,
+                    "BlockPublicPolicy": True,
+                    "RestrictPublicBuckets": True,
+                },
+            )
+            print_status("✅", "Configured public access block on S3 backend bucket")
+
+            return True
+
+        except ClientError as e:
+            print_status("❌", f"Error creating S3 bucket: {e}")
+            return False
+
+    except Exception as e:
+        print_status("❌", f"Error setting up S3 backend bucket: {e}")
+        return False
+
+
+def store_credentials_in_secrets_manager(access_key, region="us-east-1"):
+    """Store bootstrap credentials in AWS Secrets Manager with root-only access."""
+    secret_name = "pave/bootstrap-credentials"
+
+    try:
+        secrets_client = boto3.client("secretsmanager", region_name=region)
+        sts_client = boto3.client("sts")
+
+        # Get root account ID
+        account_id = sts_client.get_caller_identity()["Account"]
+
+        # Secret value with bootstrap credentials
+        secret_value = {
+            "AWS_ACCESS_KEY_ID": access_key["AccessKeyId"],
+            "AWS_SECRET_ACCESS_KEY": access_key["SecretAccessKey"],
+            "AWS_DEFAULT_REGION": region,
+            "AWS_REGION": region,
+            "created_by": "pave-bootstrap-script",
+            "description": "Bootstrap user credentials for pave infrastructure",
+        }
+
+        # Resource policy allowing only root user access
+        resource_policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": f"arn:aws:iam::{account_id}:root"},
+                    "Action": "secretsmanager:*",
+                    "Resource": "*",
+                },
+                {
+                    "Effect": "Deny",
+                    "Principal": "*",
+                    "Action": "secretsmanager:*",
+                    "Resource": "*",
+                    "Condition": {
+                        "StringNotEquals": {
+                            "aws:PrincipalArn": (f"arn:aws:iam::{account_id}:root")
+                        }
+                    },
+                },
+            ],
+        }
+
+        try:
+            # Try to update existing secret
+            secrets_client.update_secret(
+                SecretId=secret_name, SecretString=json.dumps(secret_value)
+            )
+
+            # Update resource policy
+            secrets_client.put_resource_policy(
+                SecretId=secret_name, ResourcePolicy=json.dumps(resource_policy)
+            )
+
+            print_status(
+                "✅", f"Updated bootstrap credentials in Secrets Manager: {secret_name}"
+            )
+
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code == "ResourceNotFoundException":
+                # Create new secret
+                secrets_client.create_secret(
+                    Name=secret_name,
+                    Description=(
+                        "Bootstrap user credentials for pave infrastructure "
+                        "(root access only)"
+                    ),
+                    SecretString=json.dumps(secret_value),
+                    Tags=[
+                        {"Key": "Project", "Value": "pave"},
+                        {"Key": "Purpose", "Value": "Bootstrap"},
+                        {"Key": "AccessLevel", "Value": "RootOnly"},
+                    ],
+                )
+
+                # Apply resource policy for newly created secret
+                secrets_client.put_resource_policy(
+                    SecretId=secret_name, ResourcePolicy=json.dumps(resource_policy)
+                )
+
+                print_status(
+                    "✅",
+                    f"Created bootstrap credentials in Secrets Manager: {secret_name}",
+                )
+            elif error_code == "InvalidRequestException":
+                # Secret is pending deletion, try to restore it first
+                try:
+                    print_status(
+                        "🔄",
+                        f"Secret pending deletion, attempting to restore: {secret_name}",
+                    )
+                    secrets_client.restore_secret(SecretId=secret_name)
+                    print_status(
+                        "✅", f"Restored secret from pending deletion: {secret_name}"
+                    )
+
+                    # Now update the restored secret
+                    secrets_client.update_secret(
+                        SecretId=secret_name, SecretString=json.dumps(secret_value)
+                    )
+
+                    # Update resource policy
+                    secrets_client.put_resource_policy(
+                        SecretId=secret_name, ResourcePolicy=json.dumps(resource_policy)
+                    )
+
+                    print_status(
+                        "✅",
+                        f"Updated restored bootstrap credentials in Secrets Manager: {secret_name}",
+                    )
+                except ClientError as restore_error:
+                    print_status("❌", f"Failed to restore secret: {restore_error}")
+                    return False
+            else:
+                raise
+
+        return True
+
+    except Exception as e:
+        print_status("❌", f"Error storing credentials in Secrets Manager: {e}")
+        return False
+
+
+def delete_credentials_from_secrets_manager(region="us-east-1"):
+    """Delete bootstrap credentials from AWS Secrets Manager."""
+    secret_name = "pave/bootstrap-credentials"
+
+    try:
+        secrets_client = boto3.client("secretsmanager", region_name=region)
+
+        try:
+            # Delete the secret immediately (no recovery period)
+            secrets_client.delete_secret(
+                SecretId=secret_name, ForceDeleteWithoutRecovery=True
+            )
+            print_status(
+                "✅",
+                f"Deleted bootstrap credentials from Secrets Manager: {secret_name}",
+            )
+            return True
+
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code == "ResourceNotFoundException":
+                print_status(
+                    "ℹ️",
+                    f"No bootstrap credentials found in Secrets Manager: {secret_name}",
+                )
+                return True
+            else:
+                print_status("❌", f"Error deleting secret from Secrets Manager: {e}")
+                return False
+
+    except Exception as e:
+        print_status("❌", f"Error connecting to Secrets Manager: {e}")
+        return False
+
+
 def update_secrets_file(access_key):
-    """Update the .secrets file with new bootstrap credentials."""
+    """Update or create .secrets file with new bootstrap credentials."""
+    import os
+    import shutil
+
     secrets_path = ".secrets"
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    secrets_path = os.path.join(project_root, secrets_path)
 
     try:
         # Create .secrets content
         secrets_content = f"""AWS_ACCESS_KEY_ID={access_key['AccessKeyId']}
 AWS_SECRET_ACCESS_KEY={access_key['SecretAccessKey']}
 AWS_DEFAULT_REGION=us-east-1
+AWS_REGION=us-east-1
 """
 
-        # Backup existing .secrets if it exists
-        import os
-
+        # Create backup if .secrets exists
         if os.path.exists(secrets_path):
-            backup_path = f"{secrets_path}.backup"
-            import shutil
-
+            backup_path = secrets_path + ".backup"
+            print_status("💾", "Backed up existing .secrets to .secrets.backup")
             shutil.copy2(secrets_path, backup_path)
-            print_status("💾", f"Backed up existing .secrets to {backup_path}")
 
         # Write new .secrets file
         with open(secrets_path, "w") as f:
             f.write(secrets_content)
+
+        # Set secure permissions (600)
+        os.chmod(secrets_path, 0o600)
 
         print_status("✅", "Updated .secrets file with new bootstrap credentials")
         return True
@@ -283,6 +551,10 @@ def main():
 
         print()
 
+        # Step 0: Clean up any existing access keys to prevent limit issues
+        print_status("0️⃣", "Checking for existing access keys...")
+        cleanup_existing_access_keys(iam_client, "bootstrap-user")
+
         # Step 1: Create bootstrap user
         print_status("1️⃣", "Creating bootstrap user...")
         user_arn = create_bootstrap_user(iam_client)
@@ -306,8 +578,18 @@ def main():
         if not access_key:
             sys.exit(1)
 
-        # Step 5: Update .secrets file
-        print_status("5️⃣", "Updating .secrets file...")
+        # Step 5: Create S3 backend bucket
+        print_status("5️⃣", "Creating S3 backend bucket...")
+        if not create_s3_backend_bucket():
+            sys.exit(1)
+
+        # Step 6: Store credentials in Secrets Manager
+        print_status("6️⃣", "Storing credentials in AWS Secrets Manager...")
+        if not store_credentials_in_secrets_manager(access_key):
+            sys.exit(1)
+
+        # Step 7: Update .secrets file
+        print_status("7️⃣", "Updating .secrets file...")
         if not update_secrets_file(access_key):
             sys.exit(1)
 

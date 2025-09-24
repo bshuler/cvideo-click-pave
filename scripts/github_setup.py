@@ -27,7 +27,7 @@ def get_admin_credentials() -> Optional[Dict[str, str]]:
         admin_user = None
 
         for user in response["Users"]:
-            if "admin-user-" in user["UserName"]:
+            if user["UserName"] == "admin-user":
                 admin_user = user["UserName"]
                 break
 

@@ -35,6 +35,7 @@ venv.bak/
 credentials/
 *.env
 .secrets
+.root-secrets
 
 # IDE and Editor files
 .vscode/
