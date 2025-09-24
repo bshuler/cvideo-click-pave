@@ -1,696 +1,322 @@
 # CVideo Click Pave - AWS Infrastructure as Code
 
-## Project Overview
+Fully automated AWS infrastructure provisioning with intelligent workflows, comprehensive error detection, and unified development experience.
 
-This repository contains Terraform infrastructure as code for AWS resource provisioning, specifically designed for the cvideo-click project. It creates the necessary AWS infrastructure including S3 buckets, IAM roles, users, and policies required for both development and CI/CD operations.
+## Overview
 
-## ⚠️ PREREQUISITE: Bootstrap User Setup
+This repository provides **Infrastructure as Code (IaC)** for AWS using Terraform, with Python automation scripts and a comprehensive Makefile interface. It creates secure, production-ready AWS infrastructure with proper IAM roles, S3 storage, and CI/CD integration.
 
-**This repository requires a bootstrap user to be created by the AWS root account before any operations can be performed.**
+## Key Features
 
-### Root Account Setup Steps
+- **🤖 Fully Automated**: One-command infrastructure deployment
+- **🔒 Security First**: Bootstrap user model with protected resources
+- **🎯 Intelligent Workflows**: Adapts to local development and GitHub Actions
+- **🧪 Comprehensive Testing**: Full test pipeline with validation
+- **🛠️ Developer Friendly**: Rich Makefile interface with clear feedback
+- **📊 Quality Assurance**: Integrated code formatting, linting, and type checking
+- **⚡ Error Detection**: Pylance integration with TypedDict safety monitoring
 
-**These steps must be completed by someone with AWS root account access:**
-
-1. **Login to AWS Console with Root Account**
-   
-2. **Create Bootstrap User** (in IAM Console > Users):
-
-   ```text
-   User Name: bootstrap-user
-   Access type: Programmatic access
-   ```
-
-3. **Create Bootstrap Role** (in IAM Console > Roles):
-
-   ```text
-   Role Name: PaveBootstrapRole
-   Trust relationship: Allow the bootstrap user to assume this role
-   Permissions: AdministratorAccess (or custom policy with required permissions)
-   ```
-
-4. **Create Bootstrap Policy** (in IAM Console > Policies):
-
-   ```text
-   Policy Name: PaveBootstrapPolicy
-   Permissions:
-   - Full IAM access EXCEPT cannot delete bootstrap-user or PaveBootstrapRole
-   - Full S3 access
-   - Full Lambda access  
-   - Full EC2 access
-   ```
-
-5. **Attach Policy to Bootstrap User**:
-   - Attach `PaveBootstrapPolicy` to `bootstrap-user`
-
-6. **Generate Access Keys**:
-   - Create access key for `bootstrap-user`
-   - Save the Access Key ID and Secret Access Key securely
-
-7. **Configure Repository Secrets**:
-   - Set `AWS_ACCESS_KEY_ID` to bootstrap user's access key
-   - Set `AWS_SECRET_ACCESS_KEY` to bootstrap user's secret key
-   - Set `AWS_REGION` to your preferred region (e.g., `us-east-1`)
-
-### Security Model
-
-- **Bootstrap User**: Has administrative privileges, manages all pave infrastructure
-- **Admin Users**: Created by pave, cannot delete bootstrap resources  
-- **Developer Users**: Limited privileges for application development
-- **CI/CD Roles**: Specific permissions for deployment automation
-
-**The bootstrap user and role are never managed by Terraform and will never be deleted by cleanup operations.**
-
-### Key Features
-
-- **Unified Workflow**: Single GitHub Actions workflow that intelligently adapts to local (Act) and production (GitHub Actions) environments
-- **Smart Authentication**: Uses access key authentication for both local and GitHub Actions (simplified approach)
-- **Consistent Resource Naming**: Uses predictable naming for clean resource management across deployments
-- **Clean State Management**: Local testing includes destroy step for clean slate deployments
-- **Comprehensive IAM**: Separate users and roles for admin, developers, and CI/CD with appropriate permissions
-- **Credential Management**: Smart scripts for extracting and setting up credentials securely
-
-### What This Repository Provisions
-
-- **S3 Bucket**: Terraform state storage with versioning enabled
-- **IAM Roles**:
-  - `CICDDeploymentRole-{suffix}`: For GitHub Actions with S3/Lambda access
-  - `DeveloperRole-{suffix}`: For development with EC2/S3/Lambda access
-- **IAM Users**:
-  - `admin-user-{suffix}`: Full administrative access with access keys
-  - `developer-user-{suffix}`: Limited development access (S3, Lambda, EC2 read-only) with access keys
-- **IAM Policies**: Custom S3-specific policies for granular access control
-
-## Project Structure
-
-```text
-├── .github/workflows/
-│   └── terraform.yaml         # Unified intelligent workflow
-├── pave_infra.tf              # Main Terraform configuration
-├── cleanup-all.sh             # Comprehensive resource cleanup script
-├── extract-credentials.sh     # Legacy credential extraction (see get-credentials.sh)
-├── get-credentials.sh         # Smart credential template generator
-├── .secrets                   # Local AWS credentials (gitignored)
-├── .actrc                     # Act configuration (secrets file, container settings)
-├── .gitignore                 # Git ignore rules (includes credentials/)
-├── credentials/               # Generated credentials directory (gitignored)
-│   ├── admin.env             # Admin user credentials template
-│   └── developer.env         # Developer user credentials template
-├── GITHUB_SETUP.md            # GitHub repository secrets setup guide
-├── WARP.md                    # Project documentation
-└── README.md                  # This file
-```
-## 🎯 Purpose
-
-This project provisions AWS infrastructure for:
-
-- **Application deployment** via S3 and Lambda
-- **Developer access** with appropriate IAM users and roles
-- **CI/CD pipeline** integration with GitHub Actions
-- **Terraform state management** with S3 backend
-- **Security best practices** with access key authentication
-
-## 🏗️ Infrastructure Components
-
-### Core Resources
-
-- **S3 Bucket**: Terraform state storage with versioning (`pave-tf-state-bucket-{region}-{suffix}`)
-- **Admin User**: Full AWS administrator access (`admin-user-{suffix}`)
-- **Developer User**: Limited access for application development (`developer-user-{suffix}`)
-- **CI/CD Role**: GitHub Actions role with deployment permissions (`CICDDeploymentRole-{suffix}`)
-- **Developer Role**: Role for developers to assume (`DeveloperRole-{suffix}`)
-
-### IAM Policies & Permissions
-
-- **Administrator Access**: Full AWS permissions for admin user
-- **Developer Permissions**: S3 Full Access + Lambda Full Access + EC2 Read Only
-- **CI/CD Permissions**: S3 Full Access + Lambda Full Access + Custom S3 bucket policies
-
-### Consistent Resource Naming
-
-All resources use predictable naming conventions:
-- Clean, readable resource names
-- Consistent across all deployments
-- S3 backend shared across all deployment methods
-
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
 
-1. **AWS Account** with appropriate permissions to create IAM users, roles, and S3 buckets
-2. **AWS CLI** configured with admin credentials
-3. **Terraform** 1.5.6+ installed locally
-4. **Docker** (for local testing with Act)
-5. **GitHub CLI** (for GitHub Actions management)
+- **AWS Account** with root access (one-time setup only)
+- **Terraform** 1.5.6+
+- **Python** 3.8+ with pip
+- **Docker** (optional, for local testing)
+- **GitHub CLI** (optional, for GitHub integration)
 
-### Installation
+### One-Time Bootstrap Setup
 
-1. **Clone the repository**:
+**First time only** - requires AWS root account credentials:
+
+1. **Get Root Credentials**:
+
    ```bash
-   git clone https://github.com/bshuler/cvideo-click-pave.git
-   cd cvideo-click-pave
+   make bootstrap-root-help
    ```
 
-2. **Install Act** (for local testing):
+2. **Create Bootstrap Infrastructure**:
+
    ```bash
-   # macOS
-   brew install act
-   
-   # Other platforms: https://github.com/nektos/act#installation
+   make bootstrap-create
    ```
 
-3. **Install GitHub CLI** (for repository secrets):
+3. **Switch to Bootstrap User**:
+
    ```bash
-   # macOS
-   brew install gh
-   
-   # Other platforms: https://cli.github.com/manual/installation
+   make bootstrap-switch
    ```
 
-## 💻 Primary Interface: Makefile
+After this setup, all operations use secure bootstrap user credentials.
 
-This repository uses a **Makefile as the primary interface** for all operations. The Makefile orchestrates Terraform and Python scripts to provide a unified experience.
-
-### 🚀 Quick Start
+### Deploy Infrastructure
 
 ```bash
-# 1. Initialize environment and dependencies
+# Initialize and deploy
 make init
-
-# 2. Validate configuration  
-make validate
-
-# 3. Deploy infrastructure
 make apply
 
-# 4. Generate credential templates
+# Generate credentials
 make credentials
 
-# 5. View current status
-make status
+# Set up GitHub secrets (optional)
+make setup-github
 ```
 
-### 📋 All Available Commands
+## 🏗️ What Gets Provisioned
 
-Run `make help` to see all available commands:
+### Core Infrastructure
 
-```bash
-make help           # Show all available commands
-make init           # Initialize terraform and install Python dependencies
-make plan           # Run terraform plan to preview changes
-make apply          # Deploy infrastructure with terraform apply
-make destroy        # Destroy infrastructure with terraform destroy
-make clean          # Comprehensive cleanup of all AWS resources (destructive!)
-make credentials    # Generate credential template files
-make setup-github   # Set up GitHub repository secrets
-make dev-deploy     # Full local development deployment (clean slate)
-make validate       # Validate terraform configuration and Python code
-make status         # Show current infrastructure status
-```
+- **S3 Bucket**: `pave-tf-state-bucket-us-east-1` (Terraform state with versioning)
+- **Admin User**: `admin-user` (Full administrative access)
+- **Developer User**: `developer-user` (Limited development access)
+- **CI/CD Role**: `CICDDeploymentRole` (GitHub Actions deployment)
+- **Developer Role**: `DeveloperRole` (Developer role assumption)
 
-## 🛠️ Deployment Methods
+### Security Model
 
-The Makefile supports **multiple underlying deployment methods** while providing a consistent interface:
+- **Bootstrap User**: `bootstrap-user` (Protected, never managed by Terraform)
+- **Admin Users**: Cannot delete bootstrap resources (explicit deny policies)
+- **Developer Users**: Limited permissions (S3 + Lambda + EC2 read-only)
+- **CI/CD Roles**: Specific deployment permissions only
 
-### 1. � Act (Local GitHub Actions Testing) - **Recommended for Development**
+## 🛠️ Development Workflow
 
-Act runs GitHub Actions workflows locally using Docker, providing the closest simulation to the production environment.
-
-#### Setup Act Environment
-
-1. **Configure AWS credentials** in `.secrets` file:
-   ```bash
-   # Create .secrets file (already configured in .actrc)
-   cat > .secrets << EOF
-   AWS_ACCESS_KEY_ID=your_admin_access_key_here
-   AWS_SECRET_ACCESS_KEY=your_admin_secret_key_here  
-   AWS_REGION=us-east-1
-   EOF
-   ```
-
-2. **Run the workflow** (the `.actrc` file automatically loads secrets):
-   ```bash
-   # Complete infrastructure deployment (includes clean destroy first)
-   act -W .github/workflows/terraform.yaml
-   
-   # With verbose output for debugging
-   act -W .github/workflows/terraform.yaml --verbose
-   
-   # Specify specific job
-   act -W .github/workflows/terraform.yaml --job terraform
-   ```
-
-#### What Act Does Differently
-
-- ✅ **Clean slate testing**: Automatically runs `terraform destroy` before apply
-- ✅ **Manual Terraform install**: Downloads and installs Terraform 1.5.6
-- ✅ **Access key authentication**: Uses AWS credentials from secrets file
-- ✅ **Debug output**: Shows file listings and environment details
-- ✅ **Docker isolation**: Runs in consistent Ubuntu container environment
-
-### 2. 🤖 GitHub Actions (Production CI/CD)
-
-Automatic deployment triggered by pushes to main branch or manual workflow dispatch.
-
-#### Setup GitHub Actions
-
-1. **Configure repository secrets** using GitHub CLI:
-   ```bash
-   # Set the three required secrets (run these after infrastructure exists)
-   gh secret set AWS_ACCESS_KEY_ID --body 'YOUR_BOOTSTRAP_ACCESS_KEY_ID'
-   gh secret set AWS_SECRET_ACCESS_KEY --body 'YOUR_BOOTSTRAP_SECRET_ACCESS_KEY'  
-   gh secret set AWS_REGION --body 'us-east-1'
-   
-   # Verify secrets are set
-   gh secret list
-   ```
-
-   > **Note**: The credentials above are examples from our testing. Use your actual admin user credentials created by running the infrastructure once locally first.
-
-2. **Trigger deployment**:
-   ```bash
-   # Automatic trigger - push to main
-   git add .
-   git commit -m "Deploy infrastructure"
-   git push origin main
-   
-   # Manual trigger
-   gh workflow run terraform.yaml
-   ```
-
-3. **Monitor workflow**:
-   ```bash
-   # Check workflow status
-   gh run list --workflow="terraform.yaml" --limit 5
-   
-   # View specific run details
-   gh run view <run-id>
-   
-   # View real-time logs
-   gh run view --log <run-id>
-   ```
-
-#### What GitHub Actions Does
-
-- ✅ **Production deployment**: Uses access key authentication
-- ✅ **Automatic triggers**: Runs on push to main branch
-- ✅ **Manual dispatch**: Can be triggered via CLI or GitHub web interface
-- ✅ **Standard workflow**: Plan → Apply (no destroy step)
-- ✅ **Terraform setup**: Uses HashiCorp's setup-terraform action
-
-### 3. 🌐 Direct Git Push
-
-The simplest method - just push code changes to trigger automatic deployment.
+### Primary Commands
 
 ```bash
-# Make infrastructure changes to pave_infra.tf
-# Then commit and push
-git add pave_infra.tf
-git commit -m "Update infrastructure configuration"
-git push origin main
+# Get help
+make help
 
-# Monitor deployment
-gh run list --workflow="terraform.yaml" --limit 3
-```
+# Initialize environment
+make init
 
-### 4. 🔧 Direct Terraform (Traditional)
+# Deploy infrastructure
+make apply
 
-Standard Terraform workflow for direct infrastructure management.
+# Run validation and tests
+make validate
+make test
 
-#### Setup Local Terraform
-
-1. **Configure AWS credentials**:
-   ```bash
-   # Option 1: Environment variables
-   export AWS_ACCESS_KEY_ID=your_access_key
-   export AWS_SECRET_ACCESS_KEY=your_secret_key
-   export AWS_DEFAULT_REGION=us-east-1
-   
-   # Option 2: AWS CLI profile
-   aws configure --profile pave
-   export AWS_PROFILE=pave
-   ```
-
-2. **Run Terraform commands**:
-   ```bash
-   # Initialize (first time)
-   terraform init
-   
-   # Plan changes
-   terraform plan
-   
-   # Apply infrastructure
-   terraform apply
-   
-   # Destroy when needed
-   terraform destroy
-   ```
-
-#### Terraform Command Reference
-
-```bash
-# View current state
-terraform show
-terraform state list
-
-# Validate configuration
-terraform validate
-terraform fmt
-
-# Target specific resources
-terraform apply -target="aws_iam_user.admin_user"
-terraform destroy -target="aws_s3_bucket.tf_state_bucket"
-
-# Import existing resources
-terraform import aws_iam_user.admin_user existing-user-name
-```
-
-## 🔐 Credential Management
-
-After successful infrastructure deployment, you'll have two sets of user credentials plus roles.
-
-### Extract Credentials
-
-Use the Makefile credential management:
-
-```bash
-# Generate credential template files with AWS Console instructions
-make credentials
-```
-
-This Python script:
-
-- 🔍 Finds your deployed users automatically using boto3
-- 📝 Creates secure template files (`credentials/admin.env`, `credentials/developer.env`)  
-- 🔒 Sets proper file permissions (600)
-- 📋 Provides step-by-step AWS Console instructions
-- ⚠️ Handles the fact that access key secrets can't be retrieved after creation
-- 🐍 Uses Python + boto3 instead of shell scripts
-
-### Using Developer Credentials
-
-The developer credentials are designed for your application repositories:
-
-```bash
-# Copy developer credentials to your app project
-cp credentials/developer.env /path/to/your/app/.env
-
-# View the template with instructions
-cat credentials/developer.env
-```
-
-### Developer User Permissions
-
-The developer user (`developer-user-{suffix}`) has these AWS permissions:
-- ✅ **Amazon S3 Full Access**: Upload/download files, manage buckets for static websites
-- ✅ **AWS Lambda Full Access**: Create and deploy serverless functions
-- ✅ **Amazon EC2 Read Only Access**: View instances (helpful for debugging)
-
-### Security Best Practices
-
-- 🔒 All credential files are in `.gitignore` 
-- 🔒 Files have restrictive permissions (600 - owner read/write only)
-- 🔒 Use admin credentials **only** for infrastructure management
-- 🔒 Use developer credentials for your application development
-- ⚠️ Never commit credential files to version control
-- 💡 Consider rotating access keys periodically
-
-## 🧹 Resource Cleanup
-
-### Comprehensive Cleanup
-
-When you need to clean up **ALL** infrastructure resources (useful for testing or complete redeployment):
-
-```bash
-# WARNING: This removes ALL pave infrastructure resources
+# Clean up everything
 make clean
 ```
 
-This Python script performs comprehensive cleanup:
-
-- 🗑️ Removes all admin and developer users (all previous deployments)
-- 🗑️ Deletes all CICD and developer IAM roles
-- 🗑️ Removes all custom IAM policies  
-- 🗑️ Empties and deletes all S3 buckets
-- 🗑️ Cleans up local Terraform state files
-- 📊 Provides detailed progress reporting
-- 🐍 Uses Python + boto3 for robust error handling
-
-### Selective Cleanup
-
-For targeted cleanup:
+### Code Quality
 
 ```bash
-# List current resources
-aws iam list-users --query 'Users[?contains(UserName, `admin-user-`) || contains(UserName, `developer-user-`)].UserName' --output table
+# Format code
+make format
 
-# Remove specific deployment
-terraform destroy -target="aws_iam_user.admin_user" 
-terraform destroy -target="aws_iam_user.developer_user"
+# Run linting
+make lint
+
+# Type checking
+make type-check
+
+# Security scan
+make security
+
+# Pylance error detection
+make pylance-check
+
+# Complete validation
+make validate
 ```
 
-## 🔄 CI/CD Pipeline Details
-
-### Unified Workflow Intelligence
-
-Our single `terraform.yaml` workflow automatically adapts to different environments:
-
-| Environment | Detection | Authentication | Behavior |
-|-------------|-----------|----------------|----------|
-| **Local (Act)** | `${{ env.ACT }}` | AWS Access Keys | Destroy → Plan → Apply |
-| **GitHub Actions** | `${{ !env.ACT }}` | AWS Access Keys | Plan → Apply |
-
-### Workflow Triggers
-
-```yaml
-on:
-  push:
-    branches: [main]        # Automatic on push
-  workflow_dispatch:        # Manual via GitHub CLI or web
-```
-
-### Pipeline Steps
-
-1. **Environment Detection**: Automatically detects local vs GitHub execution
-2. **AWS Authentication**: Uses access keys from secrets (simplified approach)
-3. **Terraform Setup**: Downloads appropriate Terraform version
-4. **Infrastructure Deployment**: Plan and apply changes
-5. **State Management**: Uses S3 backend for state storage
-
-### Monitoring Pipeline
+### Testing
 
 ```bash
-# List recent workflow runs
-gh run list --limit 10
+# Full end-to-end test
+make full-test
 
-# Watch running workflow
-gh run view --log
+# Local GitHub Actions testing
+make test-act
 
-# View workflow in browser
-gh workflow view terraform.yaml --web
+# Infrastructure health check  
+make test-infrastructure
 ```
 
-## 🛠️ Troubleshooting
+## 📂 Project Structure
 
-### Common Issues & Solutions
-
-#### 1. Access Key Issues
-```bash
-# Problem: Invalid AWS credentials
-# Solution: Verify credentials
-aws sts get-caller-identity
-
-# Update secrets for GitHub Actions
-gh secret set AWS_ACCESS_KEY_ID --body 'new_key'
+```
+```text
+├── .github/workflows/
+│   └── terraform.yaml         # Unified intelligent workflow
+├── scripts/                   # Python automation scripts
+│   ├── create_bootstrap.py    # Bootstrap infrastructure creation
+│   ├── credentials.py         # Credential management
+│   ├── cleanup.py            # Resource cleanup
+│   ├── pylance_check_mcp.py  # Pylance error detection
+│   └── ...
+├── pave_infra.tf             # Main Terraform configuration
+├── Makefile                  # Primary interface with rich commands
+├── requirements.txt          # Python dependencies
+├── pyproject.toml           # Code quality configuration
+├── .ai-context.md           # AI assistant guidance
+└── credentials/             # Generated credential files (gitignored)
 ```
 
-#### 2. Resource Naming Conflicts
-```bash
-# Problem: Resources already exist
-# Solution: Use cleanup script or check for existing resources
-./cleanup-all.sh
-aws iam list-users --query 'Users[?contains(UserName, `admin-user-`)].UserName'
-```
+## 🔑 Credential Management
 
-#### 3. Terraform State Issues
-```bash
-# Problem: State file corruption or conflicts
-# Solution: Reinitialize and import existing resources
-rm -rf .terraform/
-terraform init
-terraform import aws_iam_user.admin_user existing-admin-user-name
-```
-
-#### 4. Act/Docker Issues
-```bash
-# Problem: Docker container issues
-# Solution: Clean Docker cache and use specific platform
-docker system prune -a
-act -W .github/workflows/terraform.yaml --platform ubuntu-latest=catthehacker/ubuntu:act-latest
-```
-
-### Debug Mode
+The system generates secure credential templates:
 
 ```bash
-# Act with maximum verbosity
-act -W .github/workflows/terraform.yaml --verbose --dryrun
+# Generate credentials
+make credentials
 
-# Terraform with debug logging
-export TF_LOG=DEBUG
-terraform apply
-
-# GitHub Actions debug  
-gh run rerun --debug
+# View credential info
+make credential-info
 ```
 
-### Validation Commands
+Creates:
+
+- `credentials/admin.env` - Administrator access
+- `credentials/developer.env` - Development access
+
+## 🤖 GitHub Integration
+
+Automated GitHub secrets setup:
 
 ```bash
-# Validate Terraform configuration
-terraform validate
-terraform fmt -check
+# Set repository secrets
+make setup-github
 
-# Test AWS connectivity
-aws sts get-caller-identity
-
-# Verify GitHub CLI authentication
-gh auth status
+# Test GitHub Actions
+make test-workflow
 ```
 
-## 📚 Advanced Usage
+## 🧪 Testing & Validation
 
-### Multiple Environments
-
-Each deployment uses consistent resource naming with shared state management:
+### Full Test Pipeline
 
 ```bash
-# Deploy to dev environment  
-act -W .github/workflows/terraform.yaml
-
-# Deploy to staging environment
-act -W .github/workflows/terraform.yaml --env-file .env.staging
-
-# Each creates separate: admin-user-{different-suffix}
+# Complete end-to-end test (requires root credentials)
+make full-test YES=1
 ```
 
-### Infrastructure Customization
+This runs:
 
-Key files to modify:
-- **`pave_infra.tf`**: Main infrastructure configuration
-- **`terraform.yaml`**: Workflow behavior and steps
-- **`get-credentials.sh`**: Credential extraction logic
+1. Complete cleanup
+2. Fresh bootstrap setup
+3. Infrastructure deployment
+4. Credential generation
+5. GitHub secrets configuration
+6. Comprehensive testing (local, Act, GitHub Actions)
 
-### Integration with Other Projects
+### Individual Tests
 
 ```bash
-# 1. Deploy this infrastructure first
-act -W .github/workflows/terraform.yaml
-
-# 2. Extract developer credentials
-./get-credentials.sh
-
-# 3. Copy credentials to your app project
-cp credentials/developer.env ../my-app/.env
-
-# 4. Use AWS SDK in your app with the credentials
+make test-local           # Local Terraform operations
+make test-act            # Local GitHub Actions with Act
+make test-infrastructure # AWS infrastructure health
+make test-workflow       # GitHub Actions workflow
 ```
+
+## 🔒 Security Features
+
+- **Secret Detection**: Automated scanning for exposed credentials
+- **File Permissions**: Secure 600 permissions for credential files
+- **TypedDict Safety**: Runtime error prevention with Pylance integration
+- **Bootstrap Protection**: Core resources never deleted by automation
+- **Access Key Management**: Safe credential rotation and management
+
+## 🌍 Environment Support
+
+- **Local Development**: Direct Terraform + Python scripts
+- **Act Testing**: Local GitHub Actions simulation
+- **GitHub Actions**: Production CI/CD pipeline
+- **Shared State**: S3 remote backend for consistency
+
+## 📊 Monitoring & Status
+
+```bash
+# Check current status
+make status
+
+# View Terraform state
+make state-show
+
+# Create state backup
+make state-backup
+```
+
+## 🧹 Cleanup & Maintenance
+
+```bash
+# Clean local files
+make clean-local
+
+# Comprehensive AWS cleanup (destructive!)
+make clean
+
+# Clean and redeploy
+make dev-deploy
+```
+
+## 🆘 Troubleshooting
+
+### Common Issues
+
+1. **Bootstrap Setup**: Run `make bootstrap-check` to validate
+2. **Credentials**: Use `make credential-info` for status
+3. **State Issues**: Use `make state-pull` to sync
+4. **Permission Errors**: Verify AWS credentials with `make bootstrap-check`
+
+### Getting Help
+
+```bash
+make help                    # Show all commands
+make bootstrap-root-help     # Root credential setup
+make bootstrap-reset-help    # Reset instructions  
+make full-test-help         # Full test documentation
+```
+
+## 🔄 Advanced Operations
+
+### State Management
+
+```bash
+make state-show              # View current state
+make state-pull             # Pull remote state
+make state-backup           # Create backup
+make state-import RESOURCE=<name> ID=<id>  # Import resource
+```
+
+### Bootstrap Management
+
+```bash
+make bootstrap-check        # Validate bootstrap setup
+make bootstrap-create       # Create bootstrap (root required)
+make bootstrap-destroy      # Destroy bootstrap (root required)
+make bootstrap-fix          # Fix S3 permissions
+```
+
+## 💡 Best Practices
+
+1. **Always run validation**: `make validate` before commits
+2. **Use full test pipeline**: `make full-test` for comprehensive validation
+3. **Monitor credentials**: Regular `make credential-info` checks
+4. **Backup state**: `make state-backup` before major changes
+5. **Clean deployments**: Use `make dev-deploy` for clean slate testing
 
 ## 🤝 Contributing
 
-1. **Fork** the repository
-2. **Create feature branch**: `git checkout -b feature/my-feature`
-3. **Test locally with Act**: `act -W .github/workflows/terraform.yaml`
-4. **Commit changes**: `git commit -am "Add my feature"`
-5. **Push to branch**: `git push origin feature/my-feature`
-6. **Submit pull request**
+1. **Code Quality**: All changes must pass `make validate`
+2. **Testing**: Use `make full-test` to verify end-to-end functionality
+3. **Documentation**: Update relevant `.md` files
+4. **Security**: Run `make security` to check for exposed secrets
 
-### Development Workflow
+## 📋 System Requirements
 
-```bash
-# 1. Make changes to infrastructure
-vim pave_infra.tf
-
-# 2. Test locally
-act -W .github/workflows/terraform.yaml
-
-# 3. Clean up after testing
-./cleanup-all.sh
-
-# 4. Commit and push
-git add . && git commit -m "Update infrastructure" && git push
-```
-
-## 📖 Documentation
-
-- **[GITHUB_SETUP.md](GITHUB_SETUP.md)**: Detailed GitHub repository secrets setup
-- **[WARP.md](WARP.md)**: Project documentation and context
-- **[Act Documentation](https://github.com/nektos/act)**: Local GitHub Actions runner
-- **[Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)**: AWS resource documentation
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-For issues and questions:
-
-1. **Check existing issues**: [GitHub Issues](https://github.com/bshuler/cvideo-click-pave/issues)
-2. **Review troubleshooting section** above
-3. **Run diagnostic commands**:
-   ```bash
-   # System check
-   terraform version
-   aws --version
-   act --version
-   gh --version
-   
-   # Test connectivity
-   aws sts get-caller-identity
-   gh auth status
-   ```
-4. **Create new issue** with detailed information including error messages and system details
+- **OS**: macOS, Linux, Windows (WSL)
+- **Python**: 3.8+ with pip and virtualenv
+- **Terraform**: 1.5.6+ (automatically installed by scripts)
+- **AWS CLI**: Optional (scripts use boto3 directly)
+- **Docker**: Required for Act testing
+- **Git**: Required for GitHub integration
 
 ---
 
-## 🎉 Quick Start Summary
-
-**New Makefile-Based Approach:**
-
-```bash
-# 1. Clone and setup
-git clone https://github.com/bshuler/cvideo-click-pave.git && cd cvideo-click-pave
-
-# 2. Initialize environment (installs Python deps, runs terraform init)
-make init
-
-# 3. Create secrets file with your AWS admin credentials (for local development)
-cat > .secrets << EOF
-AWS_ACCESS_KEY_ID=your_admin_key
-AWS_SECRET_ACCESS_KEY=your_admin_secret
-AWS_REGION=us-east-1
-EOF
-
-# 4. Deploy infrastructure 
-make apply
-
-# 5. Generate credential templates for your app
-make credentials
-
-# 6. Set up GitHub Actions (optional - for CI/CD)
-make setup-github
-
-# 7. Check current status anytime
-make status
-
-# 8. Clean up everything when done
-make clean
-```
-
-**Alternative Methods Still Available:**
-
-- **Act**: `act -W .github/workflows/terraform.yaml` (local GitHub Actions testing)
-- **GitHub Actions**: `git push origin main` (automatic CI/CD)
-- **Direct Terraform**: `terraform apply` (traditional approach)
-
-**All methods now use the Makefile for consistency!** 🚀
+**🎯 Ready to get started?** Run `make help` to see all available commands!

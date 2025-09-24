@@ -27,16 +27,9 @@ locals {
   environment  = "main"
 }
 
-# Create S3 bucket for Terraform state (optional if created manually)
-resource "aws_s3_bucket" "tf_state_bucket" {
+# Reference existing S3 bucket created by bootstrap process
+data "aws_s3_bucket" "tf_state_bucket" {
   bucket = "pave-tf-state-bucket-us-east-1"
-}
-
-resource "aws_s3_bucket_versioning" "tf_state_versioning" {
-  bucket = aws_s3_bucket.tf_state_bucket.id
-  versioning_configuration {
-    status = "Enabled"
-  }
 }
 
 # Data source to verify bootstrap user exists (fails if not found)

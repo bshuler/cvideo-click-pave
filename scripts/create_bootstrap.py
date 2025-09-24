@@ -1,22 +1,64 @@
 #!/usr/bin/env python3
 """
-Bootstrap user creation script for cvideo-click-pave infrastructure.
+Bootstrap infrastructure creation script.
 
-This script creates the complete bootstrap setup including:
-- bootstrap-user (IAM user)
-- PaveBootstrapRole (IAM role)
-- PaveBootstrapPolicy (IAM policy)
+This script creates the initial IAM user and S3 bucket for Terraform state
+management in AWS. It handles creating, updating, and cleaning up the bootstrap
+infrastructure that Terraform itself will then manage.
 
-CRITICAL: This must be run with AWS root account or admin credentials.
+Key features:
+- Creates bootstrap IAM user with minimal required permissions
+- Sets up S3 bucket for Terraform state with proper versioning and encryption
+- Stores credentials securely in AWS Secrets Manager
+- Provides comprehensive error handling and status reporting
+- Supports cleanup operations for complete teardown
+
+The script implements safe practices:
+- Cleans up existing access keys to prevent limit issues
+- Uses secure credential storage with proper IAM policies
+- Implements proper error handling for all AWS operations
+- Provides clear status messaging throughout the process
+
+Usage: python scripts/create_bootstrap.py
 """
 
-import boto3
 import json
+import os
+import shutil
 import sys
+from pathlib import Path
+from typing import Optional
+
+import boto3
 from botocore.exceptions import ClientError
 
+# Add project root to path for local imports
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
-def print_status(emoji: str, message: str):
+
+def get_error_code(e: ClientError) -> Optional[str]:
+    """
+    Safely extract error code from AWS ClientError.
+
+    Args:
+        e: ClientError exception from boto3
+
+    Returns:
+        Error code string if available, None otherwise
+
+    Example:
+        >>> error_code = get_error_code(client_error)
+        >>> if error_code == "EntityAlreadyExists":
+        ...     print("User already exists")
+    """
+    try:
+        return e.response.get("Error", {}).get("Code")
+    except (AttributeError, TypeError):
+        return None
+
+
+def print_status(emoji: str, message: str) -> None:
     """Print formatted status message."""
     print(f"{emoji} {message}")
 
@@ -115,7 +157,8 @@ def create_bootstrap_policy(iam_client):
         return policy_arn
 
     except ClientError as e:
-        if e.response["Error"]["Code"] == "EntityAlreadyExists":
+        error_code = get_error_code(e)
+        if error_code == "EntityAlreadyExists":
             # Policy exists, get its ARN
             account_id = boto3.client("sts").get_caller_identity()["Account"]
             policy_arn = f"arn:aws:iam::{account_id}:policy/{policy_name}"
@@ -157,7 +200,8 @@ def create_bootstrap_role(iam_client, bootstrap_user_arn: str):
         return role_arn
 
     except ClientError as e:
-        if e.response["Error"]["Code"] == "EntityAlreadyExists":
+        error_code = get_error_code(e)
+        if error_code == "EntityAlreadyExists":
             # Role exists, get its ARN
             response = iam_client.get_role(RoleName=role_name)
             role_arn = response["Role"]["Arn"]
@@ -186,7 +230,8 @@ def cleanup_existing_access_keys(iam_client, user_name: str):
             print_status("ℹ️", f"No existing access keys found for {user_name}")
 
     except ClientError as e:
-        if e.response["Error"]["Code"] == "NoSuchEntity":
+        error_code = get_error_code(e)
+        if error_code == "NoSuchEntity":
             print_status("ℹ️", f"User {user_name} does not exist yet")
         else:
             print_status("❌", f"Error checking access keys: {e}")
@@ -209,7 +254,8 @@ def create_bootstrap_user(iam_client):
         return user_arn
 
     except ClientError as e:
-        if e.response["Error"]["Code"] == "EntityAlreadyExists":
+        error_code = get_error_code(e)
+        if error_code == "EntityAlreadyExists":
             # User exists, get its ARN
             response = iam_client.get_user(UserName=user_name)
             user_arn = response["User"]["Arn"]
@@ -227,7 +273,8 @@ def attach_policy_to_user(iam_client, user_name: str, policy_arn: str):
         print_status("✅", f"Attached policy to {user_name}")
         return True
     except ClientError as e:
-        if e.response["Error"]["Code"] == "NoSuchEntity":
+        error_code = get_error_code(e)
+        if error_code == "NoSuchEntity":
             print_status("ℹ️", "Policy already attached")
             return True
         else:
@@ -243,15 +290,58 @@ def create_access_key(iam_client, user_name: str):
 
         print_status("✅", "Created access key for bootstrap user")
         print_status("🔑", f"Access Key ID: {access_key['AccessKeyId']}")
-        print_status("🔒", f"Secret Access Key: {access_key['SecretAccessKey']}")
+        print_status("🔒", "Secret Access Key: [HIDDEN FOR SECURITY]")
         print_status(
-            "⚠️", "SAVE THESE CREDENTIALS SECURELY - They won't be shown again!"
+            "⚠️", "Credentials saved securely to .secrets and AWS Secrets Manager"
         )
 
         return access_key
     except ClientError as e:
         print_status("❌", f"Error creating access key: {e}")
         return None
+
+
+def wait_for_s3_bucket_availability(
+    bucket_name: str, region: str = "us-east-1", max_attempts: int = 6
+):
+    """Wait for S3 bucket to be available for Terraform backend operations."""
+    import time
+
+    s3_client = boto3.client("s3", region_name=region)
+    initial_delay = 1.0  # Start with 1 second delay
+
+    for attempt in range(max_attempts):
+        try:
+            # Test bucket availability with a simple operation that Terraform would use
+            s3_client.head_bucket(Bucket=bucket_name)
+            # Also test if we can list objects (what Terraform init does)
+            s3_client.list_objects_v2(Bucket=bucket_name, MaxKeys=1)
+            return True
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code in ["NoSuchBucket", "404"]:
+                if attempt < max_attempts - 1:  # Don't sleep on the last attempt
+                    delay = initial_delay * (2**attempt)
+                    print_status(
+                        "⏳",
+                        f"S3 bucket propagation delay (attempt {attempt + 1}/{max_attempts}), retrying in {delay:.1f}s...",
+                    )
+                    time.sleep(delay)
+                else:
+                    print_status(
+                        "❌",
+                        f"S3 bucket {bucket_name} not available after {max_attempts} attempts",
+                    )
+                    return False
+            else:
+                # Different error, don't retry
+                print_status("❌", f"Error checking bucket availability: {e}")
+                return False
+        except Exception as e:
+            print_status("❌", f"Unexpected error checking bucket availability: {e}")
+            return False
+
+    return False
 
 
 def create_s3_backend_bucket(region="us-east-1"):
@@ -265,7 +355,14 @@ def create_s3_backend_bucket(region="us-east-1"):
         try:
             s3_client.head_bucket(Bucket=bucket_name)
             print_status("ℹ️", f"S3 backend bucket already exists: {bucket_name}")
-            return True
+            # Still need to wait for full availability
+            if wait_for_s3_bucket_availability(bucket_name, region):
+                print_status(
+                    "✅", "S3 backend bucket is ready for Terraform operations"
+                )
+                return True
+            else:
+                return False
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "")
             if error_code != "404":  # Not a "bucket doesn't exist" error
@@ -281,9 +378,7 @@ def create_s3_backend_bucket(region="us-east-1"):
                 # For other regions, specify LocationConstraint
                 s3_client.create_bucket(
                     Bucket=bucket_name,
-                    CreateBucketConfiguration={
-                        "LocationConstraint": region
-                    },  # type: ignore
+                    CreateBucketConfiguration={"LocationConstraint": region},  # type: ignore[arg-type]
                 )
 
             print_status("✅", f"Created S3 backend bucket: {bucket_name}")
@@ -321,7 +416,17 @@ def create_s3_backend_bucket(region="us-east-1"):
             )
             print_status("✅", "Configured public access block on S3 backend bucket")
 
-            return True
+            # Wait for bucket to be fully available for Terraform operations
+            print_status(
+                "⏳", "Waiting for S3 bucket to be ready for Terraform operations..."
+            )
+            if wait_for_s3_bucket_availability(bucket_name, region):
+                print_status(
+                    "✅", "S3 backend bucket is ready for Terraform operations"
+                )
+                return True
+            else:
+                return False
 
         except ClientError as e:
             print_status("❌", f"Error creating S3 bucket: {e}")
@@ -495,9 +600,6 @@ def delete_credentials_from_secrets_manager(region="us-east-1"):
 
 def update_secrets_file(access_key):
     """Update or create .secrets file with new bootstrap credentials."""
-    import os
-    import shutil
-
     secrets_path = ".secrets"
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     secrets_path = os.path.join(project_root, secrets_path)

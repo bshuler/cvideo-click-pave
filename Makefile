@@ -7,13 +7,23 @@
 .DEFAULT_GOAL := help
 
 # ==============================================================================
+# AUTHENTICATION MANAGEMENT
+# ==============================================================================
+# Clear all AWS environment variables to ensure clean authentication state
+CLEAR_AWS_ENV = unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION AWS_REGION AWS_SESSION_TOKEN AWS_PROFILE
+# Load root credentials from .root-secrets file
+LOAD_ROOT_CREDS = $(CLEAR_AWS_ENV) && set -a && source .root-secrets && set +a
+# Load bootstrap credentials from .secrets file  
+LOAD_BOOTSTRAP_CREDS = $(CLEAR_AWS_ENV) && set -a && source .secrets && set +a
+
+# ==============================================================================
 # PHONY TARGETS
 # ==============================================================================
 .PHONY: help \
         bootstrap-check bootstrap-create bootstrap-destroy bootstrap-fix bootstrap-switch bootstrap-reset-help bootstrap-root-help credential-info \
-        init plan apply destroy clean credentials setup-github-auto \
-        state-show state-pull state-backup state-import fix-s3-conflict apply-continue \
-        format lint type-check security validate \
+        init plan apply destroy clean credentials setup-github \
+        state-show state-pull state-backup state-import \
+        format lint type-check security pylance-check validate \
         test test-workflow test-infrastructure test-act test-local \
         full-test full-test-help \
         dev-deploy dev-clean status clean-local \
@@ -28,6 +38,7 @@ help:
 	@echo ""
 	@echo "🏁 FULL TEST WORKFLOW:"
 	@echo "  make full-test         Complete end-to-end infrastructure test (requires root credentials)"
+	@echo "  make full-test YES=1   Skip confirmation prompt for automated testing"
 	@echo "  make full-test-help    Show detailed full test workflow documentation"
 	@echo ""
 	@echo "🔐 BOOTSTRAP OPERATIONS (Foundation Setup):"
@@ -44,20 +55,19 @@ help:
 	@echo "  make init          Initialize terraform and install Python dependencies"  
 	@echo "  make plan          Run terraform plan to preview changes"
 	@echo "  make apply         Deploy infrastructure with terraform apply"
+	@echo "  make apply YES=1   Deploy infrastructure automatically (no confirmation prompt)"
 	@echo "  make destroy       Destroy infrastructure with terraform destroy" 
 	@echo "  make clean         Comprehensive cleanup of all AWS resources (destructive!)"
 	@echo ""
 	@echo "🔑 CREDENTIAL & SECRETS MANAGEMENT:"
 	@echo "  make credentials       Generate credential template files"
-	@echo "  make setup-github-auto Automatically set GitHub secrets from admin.env"
+	@echo "  make setup-github      Automatically set GitHub secrets from admin.env"
 	@echo ""
 	@echo "🗄️ STATE MANAGEMENT (S3 Remote Backend):"
 	@echo "  make state-show        Show current Terraform state resources"
 	@echo "  make state-pull        Pull current state from S3"
 	@echo "  make state-backup      Create local backup of remote state"
 	@echo "  make state-import      Import existing AWS resource (RESOURCE=<name> ID=<id>)"
-	@echo "  make fix-s3-conflict   Fix S3 bucket already exists error"
-	@echo "  make apply-continue    Continue deployment after fixing conflicts"
 	@echo ""
 	@echo "🧪 TESTING & VALIDATION:"
 	@echo "  make test                  Run comprehensive infrastructure tests"
@@ -71,6 +81,7 @@ help:
 	@echo "  make lint          Lint code with Flake8"
 	@echo "  make type-check    Type check with mypy"
 	@echo "  make security      Security scan for secrets and vulnerabilities"
+	@echo "  make pylance-check Check TypedDict safety with Pylance"
 	@echo "  make validate      Validate terraform configuration and Python code"
 	@echo ""
 	@echo "🛠️ DEVELOPMENT WORKFLOW:"
@@ -78,6 +89,10 @@ help:
 	@echo "  make dev-clean     Clean up development resources"
 	@echo "  make status        Show current infrastructure status"
 	@echo "  make clean-local   Clean local files and caches"
+	@echo ""
+	@echo "🤖 AUTOMATION OPTIONS:"
+	@echo "  YES=1 make <destructive-target>  Skip confirmation prompts for automation"
+	@echo "  Examples: YES=1 make destroy, YES=1 make clean, YES=1 make clean-local"
 	@echo ""
 	@echo "Testing & Validation:"
 	@echo "  make test              Run comprehensive infrastructure tests"
@@ -107,6 +122,19 @@ full-test:
 	@echo "   • Deploy complete infrastructure from scratch"
 	@echo "   • Test all pipelines (local, act, GitHub Actions)"
 	@echo ""
+	@if [ "$(YES)" != "1" ]; then \
+		echo "⚠️  This is a DESTRUCTIVE operation that will rebuild everything!"; \
+		echo "   To proceed, type 'yes' and press Enter:"; \
+		read -r response; \
+		if [ "$$response" != "yes" ]; then \
+			echo "❌ Operation cancelled."; \
+			echo "💡 To skip this confirmation, use: make full-test YES=1"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "✅ Confirmation skipped (YES=1 specified)"; \
+	fi
+	@echo ""
 	@echo "🔍 Checking for root credentials..."
 	@if [ -f .root-secrets ]; then \
 		echo "✅ Found .root-secrets file - using root credentials"; \
@@ -125,25 +153,25 @@ full-test:
 	@echo "===================================================="
 	@echo "1️⃣  Destroying existing bootstrap user..."
 	@if [ -f .root-secrets ]; then \
-		set -a && source .root-secrets && set +a && $(MAKE) bootstrap-destroy; \
+		$(LOAD_ROOT_CREDS) && $(MAKE) bootstrap-destroy; \
 	else \
-		$(MAKE) bootstrap-destroy; \
+		$(CLEAR_AWS_ENV) && $(MAKE) bootstrap-destroy; \
 	fi || echo "⚠️  Bootstrap destroy completed (may have warnings)"
 	@echo ""
 	@echo "2️⃣  Cleaning all AWS resources..."
 	@if [ -f .root-secrets ]; then \
-		set -a && source .root-secrets && set +a && $(MAKE) clean; \
+		$(LOAD_ROOT_CREDS) && $(MAKE) clean; \
 	else \
-		$(MAKE) clean; \
+		$(CLEAR_AWS_ENV) && $(MAKE) clean; \
 	fi || echo "⚠️  Cleanup completed (may have warnings)"
 	@echo ""
 	@echo "🏁 PHASE 2: FRESH SETUP (using root credentials)"
 	@echo "================================================"
 	@echo "3️⃣  Creating fresh bootstrap setup with S3 backend..."
 	@if [ -f .root-secrets ]; then \
-		set -a && source .root-secrets && set +a && $(MAKE) bootstrap-create; \
+		$(LOAD_ROOT_CREDS) && $(MAKE) bootstrap-create; \
 	else \
-		$(MAKE) bootstrap-create; \
+		$(CLEAR_AWS_ENV) && $(MAKE) bootstrap-create; \
 	fi
 	@echo ""
 	@echo "🔄 Clearing root credentials and switching to bootstrap credentials..."
@@ -152,35 +180,35 @@ full-test:
 	@echo "🏁 PHASE 3: INFRASTRUCTURE DEPLOYMENT (using bootstrap credentials)"
 	@echo "=================================================================="
 	@echo "4️⃣  Initializing Terraform..."
-	@env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY $(MAKE) init
+	@$(MAKE) init
 	@echo ""
 	@echo "5️⃣  Planning infrastructure..."
-	@env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY $(MAKE) plan
+	@$(MAKE) plan
 	@echo ""
 	@echo "6️⃣  Applying infrastructure..."
-	@env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY $(MAKE) apply
+	@$(MAKE) apply YES=1
 	@echo ""
 	@echo "🏁 PHASE 4: CREDENTIAL SETUP"
 	@echo "============================"
 	@echo "7️⃣  Generating credentials..."
-	@env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY $(MAKE) credentials
+	@$(MAKE) credentials
 	@echo ""
 	@echo "8️⃣  Setting up GitHub secrets..."
-	@env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY $(MAKE) setup-github-auto || echo "⚠️  GitHub secrets setup had issues (check GitHub CLI)"
+	@$(MAKE) setup-github || echo "⚠️  GitHub secrets setup had issues (check GitHub CLI)"
 	@echo ""
 	@echo "🏁 PHASE 5: COMPREHENSIVE TESTING"
 	@echo "=================================="
 	@echo "9️⃣  Testing local Terraform operations..."
-	@env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY $(MAKE) test-local
+	@$(MAKE) test-local
 	@echo ""
 	@echo "🔟 Testing infrastructure health..."
-	@env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY $(MAKE) test-infrastructure
+	@$(MAKE) test-infrastructure
 	@echo ""
 	@echo "1️⃣1️⃣  Testing with Act (local GitHub Actions)..."
-	@env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY $(MAKE) test-act || echo "⚠️  Act testing had issues (check Act installation)"
+	@$(MAKE) test-act || echo "⚠️  Act testing had issues (check Act installation)"
 	@echo ""
 	@echo "1️⃣2️⃣  Testing GitHub Actions workflow..."
-	@env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY $(MAKE) test-workflow || echo "⚠️  GitHub workflow testing had issues (check GitHub CLI)"
+	@$(MAKE) test-workflow || echo "⚠️  GitHub workflow testing had issues (check GitHub CLI)"
 	@echo ""
 	@echo "🎉 FULL TEST COMPLETED SUCCESSFULLY!"
 	@echo "====================================="
@@ -207,6 +235,11 @@ full-test-help:
 	@echo "   • GitHub CLI installed and authenticated (gh auth login)"
 	@echo "   • Act installed for local GitHub Actions testing (optional)"
 	@echo "   • Clean working directory (no uncommitted changes)"
+	@echo ""
+	@echo "🛡️ SAFETY FEATURES:"
+	@echo "   • Requires confirmation before proceeding (destructive operation)"
+	@echo "   • Use 'make full-test YES=1' to skip confirmation for automation"
+	@echo "   • All operations are logged with clear status indicators"
 	@echo ""
 	@echo "🔄 WORKFLOW PHASES:"
 	@echo ""
@@ -260,18 +293,18 @@ full-test-help:
 bootstrap-check:
 	@echo "🔐 Validating bootstrap user setup..."
 	@if [ -f .secrets ]; then \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY bash -c 'set -a && source .secrets && set +a && python3 scripts/validate_bootstrap.py'; \
+		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/validate_bootstrap.py; \
 	else \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY python3 scripts/validate_bootstrap.py; \
+		$(CLEAR_AWS_ENV) && python3 scripts/validate_bootstrap.py; \
 	fi
 
 # Fix bootstrap user S3 permissions issue
 bootstrap-fix:
 	@echo "🔧 Fixing bootstrap user S3 permissions..."
 	@if [ -f .secrets ]; then \
-		set -a && source .secrets && set +a && python3 scripts/fix_bootstrap_s3.py; \
+		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/fix_bootstrap_s3.py; \
 	else \
-		python3 scripts/fix_bootstrap_s3.py; \
+		$(CLEAR_AWS_ENV) && python3 scripts/fix_bootstrap_s3.py; \
 	fi
 
 # Create complete bootstrap setup (requires root/admin credentials)
@@ -280,10 +313,10 @@ bootstrap-create:
 	@echo "⚠️  WARNING: This requires AWS root account credentials!"
 	@if [ -f .root-secrets ]; then \
 		echo "✅ Using root credentials from .root-secrets"; \
-		set -a && source .root-secrets && set +a && python3 scripts/create_bootstrap.py; \
+		$(LOAD_ROOT_CREDS) && python3 scripts/create_bootstrap.py; \
 	else \
 		echo "📖 Using environment credentials (see BOOTSTRAP_GUIDE.md for setup)"; \
-		python3 scripts/create_bootstrap.py; \
+		$(CLEAR_AWS_ENV) && python3 scripts/create_bootstrap.py; \
 	fi
 
 # Clear root credentials and switch to bootstrap user (run after bootstrap-create)
@@ -300,16 +333,16 @@ bootstrap-destroy:
 	@if [ -f .root-secrets ]; then \
 		echo "✅ Using root credentials from .root-secrets"; \
 		if [ "$(MAKE_LEVEL)" = "0" ]; then \
-			set -a && source .root-secrets && set +a && python3 scripts/destroy_bootstrap.py; \
+			$(LOAD_ROOT_CREDS) && python3 scripts/destroy_bootstrap.py; \
 		else \
-			set -a && source .root-secrets && set +a && python3 scripts/destroy_bootstrap.py --skip-confirm; \
+			$(LOAD_ROOT_CREDS) && python3 scripts/destroy_bootstrap.py --skip-confirm; \
 		fi; \
 	else \
 		echo "📖 Using environment credentials (see BOOTSTRAP_GUIDE.md for setup)"; \
 		if [ "$(MAKE_LEVEL)" = "0" ]; then \
-			python3 scripts/destroy_bootstrap.py; \
+			$(CLEAR_AWS_ENV) && python3 scripts/destroy_bootstrap.py; \
 		else \
-			python3 scripts/destroy_bootstrap.py --skip-confirm; \
+			$(CLEAR_AWS_ENV) && python3 scripts/destroy_bootstrap.py --skip-confirm; \
 		fi; \
 	fi
 
@@ -355,7 +388,7 @@ credential-info:
 	@echo "   • make validate             - Validate configuration"
 	@echo "   • make clean                - Cleanup all AWS resources"
 	@echo "   • make credentials          - Generate credential templates"
-	@echo "   • make setup-github-auto    - Setup GitHub repository secrets"
+	@echo "   • make setup-github         - Setup GitHub repository secrets"
 	@echo "   • make status               - Check current status"
 	@echo "   • make state-show           - Show Terraform state"
 	@echo "   • make state-pull           - Pull Terraform state"
@@ -392,9 +425,9 @@ init: bootstrap-check
 	@pip3 install -r requirements.txt
 	@echo "🏗️ Initializing Terraform..."
 	@if [ -f .secrets ]; then \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY bash -c 'set -a && source .secrets && set +a && terraform init'; \
+		$(LOAD_BOOTSTRAP_CREDS) && terraform init; \
 	else \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY terraform init; \
+		$(CLEAR_AWS_ENV) && terraform init; \
 	fi
 	@echo "✅ Initialization complete!"
 
@@ -448,22 +481,28 @@ security:
 	fi
 	@echo "✅ Security scan complete!"
 
+# Check TypedDict safety with Pylance
+pylance-check:
+	@echo "🔍 Checking TypedDict safety with Pylance..."
+	@python3 scripts/pylance_check_mcp.py
+	@echo "✅ Pylance check complete!"
+
 # Validate configuration and dependencies
-validate: init security format lint
+validate: init security format lint type-check pylance-check
 	@echo "🔍 Validating configuration..."
 	@echo "📋 Checking Terraform configuration..."
 	@if [ -f .secrets ]; then \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY bash -c 'set -a && source .secrets && set +a && terraform validate && terraform fmt -check'; \
+		$(LOAD_BOOTSTRAP_CREDS) && terraform validate && terraform fmt -check; \
 	else \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY bash -c 'terraform validate && terraform fmt -check'; \
+		$(CLEAR_AWS_ENV) && terraform validate && terraform fmt -check; \
 	fi
 	@echo "🐍 Checking Python dependencies..."
 	@python3 -c "import boto3; print('✅ boto3 available')" 2>/dev/null || (echo "❌ boto3 not found. Run 'make init'" && exit 1)
 	@echo "🔑 Checking AWS credentials..."
 	@if [ -f .secrets ]; then \
-		set -a && source .secrets && set +a && python3 scripts/validate.py; \
+		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/validate.py; \
 	else \
-		python3 scripts/validate.py; \
+		$(CLEAR_AWS_ENV) && python3 scripts/validate.py; \
 	fi
 	@echo "✅ All validations passed!"
 
@@ -471,49 +510,64 @@ validate: init security format lint
 plan: validate
 	@echo "📋 Planning infrastructure changes..."
 	@if [ -f .secrets ]; then \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY bash -c 'set -a && source .secrets && set +a && terraform plan'; \
+		$(LOAD_BOOTSTRAP_CREDS) && terraform plan; \
 	else \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY terraform plan; \
+		$(CLEAR_AWS_ENV) && terraform plan; \
 	fi
 
 # Deploy infrastructure
 apply: validate
 	@echo "🚀 Deploying infrastructure..."
-	@if [ -f .secrets ]; then \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY bash -c 'set -a && source .secrets && set +a && terraform apply'; \
+	@if [ "$(YES)" = "1" ]; then \
+		echo "✅ Auto-approving deployment (YES=1)"; \
+		if [ -f .secrets ]; then \
+			$(LOAD_BOOTSTRAP_CREDS) && terraform apply -auto-approve; \
+		else \
+			$(CLEAR_AWS_ENV) && terraform apply -auto-approve; \
+		fi; \
 	else \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY terraform apply; \
+		if [ -f .secrets ]; then \
+			$(LOAD_BOOTSTRAP_CREDS) && terraform apply; \
+		else \
+			$(CLEAR_AWS_ENV) && terraform apply; \
+		fi; \
 	fi
 
 # Destroy infrastructure
 destroy:
 	@echo "⚠️  Destroying infrastructure..."
 	@echo "This will remove all Terraform-managed resources."
-	@read -p "Are you sure? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
-	@if [ -f .secrets ]; then \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY bash -c 'set -a && source .secrets && set +a && terraform destroy'; \
+	@if [ "$(YES)" = "1" ]; then \
+		echo "✅ Auto-confirmed via YES=1"; \
 	else \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY terraform destroy; \
+		read -p "Are you sure? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1; \
+	fi
+	@if [ -f .secrets ]; then \
+		$(LOAD_BOOTSTRAP_CREDS) && terraform destroy; \
+	else \
+		$(CLEAR_AWS_ENV) && terraform destroy; \
 	fi
 
 # Comprehensive cleanup of all AWS resources
 clean:
 	@echo "🧹 Starting comprehensive cleanup..."
 	@echo "⚠️  This will remove ALL pave infrastructure resources (past and present)"
-	@if [ "$(MAKE_LEVEL)" = "0" ]; then \
+	@if [ "$(YES)" = "1" ] || [ "$(MAKE_LEVEL)" != "0" ]; then \
+		echo "✅ Auto-confirmed via YES=1 or nested call"; \
+	else \
 		read -p "Are you sure? This is destructive! (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1; \
 	fi
 	@if [ -f .secrets ]; then \
-		if [ "$(MAKE_LEVEL)" = "0" ]; then \
-			set -a && source .secrets && set +a && python3 scripts/cleanup.py; \
+		if [ "$(YES)" = "1" ] || [ "$(MAKE_LEVEL)" != "0" ]; then \
+			$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/cleanup.py --skip-confirm; \
 		else \
-			set -a && source .secrets && set +a && python3 scripts/cleanup.py --skip-confirm; \
+			$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/cleanup.py; \
 		fi; \
 	else \
-		if [ "$(MAKE_LEVEL)" = "0" ]; then \
-			python3 scripts/cleanup.py; \
+		if [ "$(YES)" = "1" ] || [ "$(MAKE_LEVEL)" != "0" ]; then \
+			$(CLEAR_AWS_ENV) && python3 scripts/cleanup.py --skip-confirm; \
 		else \
-			python3 scripts/cleanup.py --skip-confirm; \
+			$(CLEAR_AWS_ENV) && python3 scripts/cleanup.py; \
 		fi; \
 	fi
 
@@ -560,31 +614,19 @@ state-import:
 	fi
 	@echo "✅ Resource imported successfully"
 
-# Fix common infrastructure deployment issues
-fix-s3-conflict:
-	@echo "🔧 Fixing S3 bucket conflict by importing existing bucket..."
-	@$(MAKE) state-import RESOURCE=aws_s3_bucket.tf_state_bucket ID=pave-tf-state-bucket-us-east-1
 
-# Continue infrastructure deployment after fixing conflicts
-apply-continue:
-	@echo "🚀 Continuing infrastructure deployment..."
-	@if [ -f .secrets ]; then \
-		set -a && source .secrets && set +a && terraform apply -auto-approve; \
-	else \
-		terraform apply -auto-approve; \
-	fi
 
 # Generate credential templates
 credentials:
 	@echo "🔐 Generating credential templates..."
 	@if [ -f .secrets ]; then \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY bash -c 'set -a && source .secrets && set +a && python3 scripts/credentials.py'; \
+		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/credentials.py; \
 	else \
-		env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY python3 scripts/credentials.py; \
+		$(CLEAR_AWS_ENV) && python3 scripts/credentials.py; \
 	fi
 
 # Automatically set GitHub secrets using admin credentials
-setup-github-auto:
+setup-github:
 	@echo "🚀 Automatically setting up GitHub repository secrets..."
 	@if [ ! -f credentials/admin.env ]; then \
 		echo "❌ Admin credentials not found. Run 'make credentials' first."; \
@@ -618,7 +660,7 @@ dev-deploy:
 		python3 scripts/cleanup.py --skip-confirm; \
 	fi
 	@echo "Step 2: Deploy fresh infrastructure"
-	@$(MAKE) apply
+	@$(MAKE) apply YES=1
 	@echo "Step 3: Generate credentials"
 	@$(MAKE) credentials
 	@echo "✅ Development deployment complete!"
@@ -626,10 +668,16 @@ dev-deploy:
 # Clean development resources
 dev-clean:
 	@echo "🧹 Cleaning development resources..."
-	@if [ -f .secrets ]; then \
-		set -a && source .secrets && set +a && python3 scripts/cleanup.py --dev-only; \
+	@echo "⚠️  This will remove development-related AWS resources"
+	@if [ "$(YES)" = "1" ] || [ "$(MAKE_LEVEL)" != "0" ]; then \
+		echo "✅ Auto-confirmed via YES=1 or nested call"; \
 	else \
-		python3 scripts/cleanup.py --dev-only; \
+		read -p "Are you sure? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1; \
+	fi
+	@if [ -f .secrets ]; then \
+		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/cleanup.py --dev-only; \
+	else \
+		$(CLEAR_AWS_ENV) && python3 scripts/cleanup.py --dev-only; \
 	fi
 
 # Run comprehensive infrastructure tests
@@ -658,7 +706,7 @@ test-workflow:
 	@echo ""
 	@echo "🔍 Checking GitHub repository secrets..."
 	@gh secret list | grep -E "(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_REGION)" || \
-		(echo "❌ Missing GitHub secrets. Run 'make setup-github-auto' first." && exit 1)
+		(echo "❌ Missing GitHub secrets. Run 'make setup-github' first." && exit 1)
 	@echo ""
 	@echo "🚀 Triggering GitHub Actions workflow..."
 	@gh workflow run terraform.yaml
@@ -674,7 +722,7 @@ test-workflow:
 # Test deployed AWS infrastructure health
 test-infrastructure:
 	@if [ -f .secrets ]; then \
-		set -a && source .secrets && set +a && python3 scripts/test_infrastructure.py; \
+		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/test_infrastructure.py; \
 	else \
 		echo "❌ No .secrets file found. Run 'make bootstrap-check' or ensure credentials are available."; \
 		exit 1; \
@@ -696,17 +744,17 @@ test-local:
 	@echo "🏠 Testing local Terraform operations..."
 	@echo "🔍 Validating Terraform configuration..."
 	@if [ -f .secrets ]; then \
-		set -a && source .secrets && set +a && terraform validate; \
+		$(LOAD_BOOTSTRAP_CREDS) && terraform validate; \
 	else \
-		terraform validate; \
+		$(CLEAR_AWS_ENV) && terraform validate; \
 	fi
 	@echo "🔍 Checking Terraform format..."
 	@terraform fmt -check
 	@echo "🔍 Testing Terraform plan (dry run)..."
 	@if [ -f .secrets ]; then \
-		set -a && source .secrets && set +a && terraform plan -detailed-exitcode || [ $$? -eq 2 ]; \
+		$(LOAD_BOOTSTRAP_CREDS) && terraform plan -detailed-exitcode || [ $$? -eq 2 ]; \
 	else \
-		terraform plan -detailed-exitcode || [ $$? -eq 2 ]; \
+		$(CLEAR_AWS_ENV) && terraform plan -detailed-exitcode || [ $$? -eq 2 ]; \
 	fi
 	@echo "✅ Local Terraform operations validated"
 
@@ -724,14 +772,20 @@ ci-deploy:
 # Status check
 status:
 	@if [ -f .secrets ]; then \
-		set -a && source .secrets && set +a && python3 scripts/status.py; \
+		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/status.py; \
 	else \
-		python3 scripts/status.py; \
+		$(CLEAR_AWS_ENV) && python3 scripts/status.py; \
 	fi
 
 # Clean local state and caches
 clean-local:
 	@echo "🧹 Cleaning local files..."
+	@echo "⚠️  This will remove local terraform state, credentials, and cache files"
+	@if [ "$(YES)" = "1" ]; then \
+		echo "✅ Auto-confirmed via YES=1"; \
+	else \
+		read -p "Are you sure? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1; \
+	fi
 	@rm -rf .terraform/
 	@rm -f terraform.tfstate*
 	@rm -rf credentials/
