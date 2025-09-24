@@ -1,7 +1,7 @@
 # Makefile for cvideo-click-pave infrastructure management
 # This is the primary interface for all infrastructure operations
 
-.PHONY: help init plan apply destroy clean credentials setup-github dev-deploy dev-clean validate test
+.PHONY: help init plan apply destroy clean credentials setup-github dev-deploy dev-clean validate test format lint type-check state-show state-pull state-backup
 
 # Default target
 help:
@@ -17,6 +17,11 @@ help:
 	@echo "  make destroy       Destroy infrastructure with terraform destroy" 
 	@echo "  make clean         Comprehensive cleanup of all AWS resources (destructive!)"
 	@echo ""
+	@echo "State Management (S3 Remote Backend):"
+	@echo "  make state-show    Show current Terraform state resources"
+	@echo "  make state-pull    Pull current state from S3"
+	@echo "  make state-backup  Create local backup of remote state"
+	@echo ""
 	@echo "Credential Management:"
 	@echo "  make credentials   Generate credential template files"
 	@echo "  make setup-github  Set up GitHub repository secrets (requires admin creds)"
@@ -25,8 +30,13 @@ help:
 	@echo "  make dev-deploy    Full local development deployment (clean slate)"
 	@echo "  make dev-clean     Clean up development resources"
 	@echo ""
-	@echo "Validation & Testing:"
+	@echo "Code Quality:"
+	@echo "  make format        Format code with Black"
+	@echo "  make lint          Lint code with Flake8"
+	@echo "  make type-check    Type check with mypy"
 	@echo "  make validate      Validate terraform configuration and Python code"
+	@echo ""
+	@echo "Testing:"
 	@echo "  make test          Run tests (if any exist)"
 	@echo ""
 	@echo "📋 Current Status:"
@@ -42,16 +52,31 @@ bootstrap-check:
 init: bootstrap-check
 	@echo "🔧 Initializing development environment..."
 	@echo "📦 Installing Python dependencies..."
-	@pip3 install --quiet boto3 botocore
-	@echo "📋 Writing requirements.txt..."
-	@echo "boto3>=1.28.0" > requirements.txt
-	@echo "botocore>=1.31.0" >> requirements.txt
+	@pip3 install -r requirements.txt
 	@echo "🏗️ Initializing Terraform..."
 	@terraform init
 	@echo "✅ Initialization complete!"
 
+# Format Python code with Black
+format:
+	@echo "🎨 Formatting Python code with Black..."
+	@python3 -m black scripts/
+	@echo "✅ Code formatting complete!"
+
+# Lint Python code with Flake8
+lint:
+	@echo "🔍 Linting Python code with Flake8..."
+	@python3 -m flake8 scripts/ --max-line-length=88 --extend-ignore=E203,W503
+	@echo "✅ Linting complete!"
+
+# Type check Python code with mypy
+type-check:
+	@echo "🔍 Type checking Python code with mypy..."
+	@python3 -m mypy scripts/
+	@echo "✅ Type checking complete!"
+
 # Validate configuration and dependencies
-validate:
+validate: format lint
 	@echo "🔍 Validating configuration..."
 	@echo "📋 Checking Terraform configuration..."
 	@terraform validate
@@ -85,6 +110,22 @@ clean:
 	@echo "⚠️  This will remove ALL pave infrastructure resources (past and present)"
 	@read -p "Are you sure? This is destructive! (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
 	@python3 scripts/cleanup.py
+
+# State Management (S3 Remote Backend)
+state-show:
+	@echo "📊 Showing Terraform state information..."
+	@echo "Backend: S3 (pave-tf-state-bucket-us-east-1)"
+	@echo "Resources:"
+	@terraform state list
+
+state-pull:
+	@echo "📥 Pulling current state from S3..."
+	@terraform state pull
+
+state-backup:
+	@echo "💾 Creating local backup of remote state..."
+	@terraform state pull > terraform.tfstate.backup.$(shell date +%Y%m%d-%H%M%S)
+	@echo "✅ State backed up with timestamp"
 
 # Generate credential templates
 credentials:

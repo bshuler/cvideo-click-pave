@@ -5,7 +5,7 @@ provider "aws" {
   # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 }
 
-# Use local backend temporarily
+# Use S3 remote backend for shared state across all deployment methods  
 terraform {
   required_providers {
     aws = {
@@ -13,11 +13,12 @@ terraform {
       version = "~> 6.0"
     }
   }
-  # backend "s3" {
-  #   bucket = "pave-tf-state-bucket"
-  #   key    = "pave/terraform.tfstate"
-  #   region = "us-east-1"
-  # }
+  backend "s3" {
+    bucket = "pave-tf-state-bucket-us-east-1"
+    key    = "pave/terraform.tfstate"
+    region = "us-east-1"
+    # Shared state across local terraform, Act, and GitHub Actions
+  }
 }
 
 # Local variables for consistent naming
