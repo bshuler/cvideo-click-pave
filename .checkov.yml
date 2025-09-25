@@ -10,10 +10,10 @@ skip-check:
   - CKV_AWS_289  # Permissions management - Admin needs limited IAM for role management
   - CKV_AWS_355  # Star resource for restrictable actions - Required for infrastructure automation
   - CKV_AWS_286  # Privilege escalation - Admin needs escalation for infrastructure management
-  
+
   # Developer Policy - Acceptable permissions for serverless development
   - CKV2_AWS_40  # Full IAM privileges - Developer has constrained IAM for service roles only
-  
+
   # IAM User Management - Acceptable for bootstrap/initial setup before SSO
   - CKV_AWS_273  # SSO vs IAM users - IAM users needed for initial setup before SSO implementation
   - CKV_AWS_40   # Policies attached to users vs roles - Bootstrap pattern requires user-attached policies

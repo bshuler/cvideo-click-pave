@@ -56,17 +56,17 @@ resource "aws_iam_policy" "admin_policy" {
           "logs:*",
           "dynamodb:*",
           "ec2:*",
-          
+
           # Monitoring and debugging
           "cloudwatch:*",
           "xray:*",
-          
+
           # Security and compliance (read-only)
           "iam:Get*",
           "iam:List*",
           "sts:AssumeRole",
           "sts:GetCallerIdentity",
-          
+
           # Cost management
           "ce:*",
           "budgets:*"
@@ -137,7 +137,10 @@ resource "aws_iam_user_policy" "developer_comprehensive_policy" {
           "lambda:*",
           "apigateway:*",
           "logs:*",
-          "dynamodb:*"
+          "dynamodb:*",
+          # IAM read permissions for infrastructure testing
+          "iam:Get*",
+          "iam:List*"
         ]
         Resource = "*"
       },
@@ -173,7 +176,6 @@ resource "aws_iam_user_policy" "developer_comprehensive_policy" {
           # Limited IAM for service roles only
           "iam:CreateRole",
           "iam:GetRole",
-          "iam:ListRoles",
           "iam:PassRole",
           "iam:AttachRolePolicy",
           "iam:DetachRolePolicy",
@@ -186,6 +188,16 @@ resource "aws_iam_user_policy" "developer_comprehensive_policy" {
           "arn:aws:iam::*:role/*-execution-role",
           "arn:aws:iam::*:role/${local.project_name}-*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          # General IAM read permissions needed for infrastructure testing
+          "iam:ListRoles",
+          "iam:ListPolicies",
+          "iam:GetAccountSummary"
+        ]
+        Resource = "*"
       },
       {
         Effect = "Allow"
