@@ -337,7 +337,12 @@ resource "aws_iam_policy" "developer_extended_policy" {
           "sqs:CreateQueue",
           "sqs:DeleteQueue",
           "sqs:GetQueueAttributes",
-          "sqs:SetQueueAttributes"
+          "sqs:SetQueueAttributes",
+          "sqs:ListQueues",
+          "sqs:SendMessage",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:PurgeQueue"
         ]
         Resource = "*"
       }
@@ -403,7 +408,7 @@ resource "aws_iam_role" "developer_role" {
   })
 }
 
-# Attach policies for S3, Lambda, and EC2
+# Attach comprehensive policies for serverless development
 resource "aws_iam_role_policy_attachment" "developer_s3_access" {
   role       = aws_iam_role.developer_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
@@ -417,6 +422,32 @@ resource "aws_iam_role_policy_attachment" "developer_lambda_access" {
 resource "aws_iam_role_policy_attachment" "developer_ec2_access" {
   role       = aws_iam_role.developer_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+}
+
+# Additional serverless development policies to match developer-user capabilities
+resource "aws_iam_role_policy_attachment" "developer_role_dynamodb_access" {
+  role       = aws_iam_role.developer_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "developer_role_sqs_access" {
+  role       = aws_iam_role.developer_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSQSFullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "developer_role_cloudwatch_logs_access" {
+  role       = aws_iam_role.developer_role.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "developer_role_apigateway_access" {
+  role       = aws_iam_role.developer_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator"
+}
+
+resource "aws_iam_role_policy_attachment" "developer_role_cloudformation_access" {
+  role       = aws_iam_role.developer_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSCloudFormationFullAccess"
 }
 
 # 3. Use existing OIDC provider for GitHub Actions (commented out since it already exists)

@@ -320,6 +320,15 @@ def test_permissions_with_session(session, user_type):
         print(f"❌ DynamoDB access failed for {user_type}: {e}")
         success = False
 
+    # Test SQS permissions
+    try:
+        sqs = session.client("sqs")
+        sqs.list_queues(MaxResults=1)
+        print(f"✅ SQS access verified for {user_type}")
+    except Exception as e:
+        print(f"❌ SQS access failed for {user_type}: {e}")
+        success = False
+
     return success
 
 
