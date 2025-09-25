@@ -61,7 +61,7 @@ help:
 	@echo ""
 	@echo "🔑 CREDENTIAL & SECRETS MANAGEMENT:"
 	@echo "  make credentials       Generate credential template files"
-	@echo "  make setup-github      Automatically set GitHub secrets from admin.env"
+	@echo "  make setup-github      Automatically set GitHub secrets from .secrets (bootstrap user)"
 	@echo ""
 	@echo "🗄️ STATE MANAGEMENT (S3 Remote Backend):"
 	@echo "  make state-show        Show current Terraform state resources"
@@ -322,6 +322,8 @@ bootstrap-create:
 		echo "📖 Using environment credentials (see BOOTSTRAP_GUIDE.md for setup)"; \
 		$(CLEAR_AWS_ENV) && python3 scripts/create_bootstrap.py; \
 	fi
+	@echo "🔧 Setting up GitHub repository secrets with bootstrap credentials..."
+	@$(MAKE) setup-github || echo "⚠️  GitHub secrets setup had issues (check GitHub CLI and authentication)"
 
 # Clear root credentials and switch to bootstrap user (run after bootstrap-create)
 bootstrap-switch:
@@ -624,27 +626,28 @@ credentials:
 		$(CLEAR_AWS_ENV) && python3 scripts/credentials.py; \
 	fi
 
-# Automatically set GitHub secrets using admin credentials
+# Automatically set GitHub secrets using bootstrap credentials
 setup-github:
 	@echo "🚀 Automatically setting up GitHub repository secrets..."
-	@if [ ! -f credentials/admin.env ]; then \
-		echo "❌ Admin credentials not found. Run 'make credentials' first."; \
+	@if [ ! -f .secrets ]; then \
+		echo "❌ Bootstrap credentials not found. Run 'make bootstrap-create' first."; \
 		exit 1; \
 	fi
 	@if ! command -v gh >/dev/null 2>&1; then \
 		echo "❌ GitHub CLI not installed. Install with: brew install gh"; \
 		exit 1; \
 	fi
-	@echo "🔍 Reading admin credentials..."
-	@AWS_ACCESS_KEY_ID=$$(grep "AWS_ACCESS_KEY_ID=" credentials/admin.env | cut -d'=' -f2); \
-	AWS_SECRET_ACCESS_KEY=$$(grep "AWS_SECRET_ACCESS_KEY=" credentials/admin.env | cut -d'=' -f2); \
-	echo "🔑 Setting AWS_ACCESS_KEY_ID..."; \
+	@echo "🔍 Reading bootstrap credentials from .secrets..."
+	@AWS_ACCESS_KEY_ID=$$(grep "AWS_ACCESS_KEY_ID=" .secrets | cut -d'=' -f2); \
+	AWS_SECRET_ACCESS_KEY=$$(grep "AWS_SECRET_ACCESS_KEY=" .secrets | cut -d'=' -f2); \
+	AWS_REGION=$$(grep "AWS_REGION=" .secrets | cut -d'=' -f2 | head -1); \
+	echo "🔑 Setting AWS_ACCESS_KEY_ID (bootstrap user)..."; \
 	gh secret set AWS_ACCESS_KEY_ID --body "$$AWS_ACCESS_KEY_ID"; \
-	echo "🔒 Setting AWS_SECRET_ACCESS_KEY..."; \
+	echo "🔒 Setting AWS_SECRET_ACCESS_KEY (bootstrap user)..."; \
 	gh secret set AWS_SECRET_ACCESS_KEY --body "$$AWS_SECRET_ACCESS_KEY"; \
 	echo "🌍 Setting AWS_REGION..."; \
-	gh secret set AWS_REGION --body "us-east-1"
-	@echo "✅ GitHub secrets configured successfully!"
+	gh secret set AWS_REGION --body "$$AWS_REGION"
+	@echo "✅ GitHub secrets configured successfully with bootstrap user credentials!"
 	@echo "📋 Verifying secrets..."
 	@gh secret list
 	@echo "🚀 You can now trigger the workflow with: gh workflow run terraform.yaml"
