@@ -178,60 +178,31 @@ jobs:
 
           echo "✅ No critical security issues found"
 
-  dependency-check:
-    name: Dependency Security Check
-    runs-on: ubuntu-latest
-    if: >
-      github.event.inputs.scan_type == 'safety' ||
-      github.event.inputs.scan_type == 'all' ||
-      github.event.inputs.scan_type == ''
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check if Snyk token is available
-        id: snyk-check
-        run: |
-          if [ -z "${{ secrets.SNYK_TOKEN }}" ]; then
-            echo "snyk_available=false" >> $GITHUB_OUTPUT
-            echo "⚠️ Snyk token not configured - skipping Snyk scan"
-          else
-            echo "snyk_available=true" >> $GITHUB_OUTPUT
-            echo "✅ Snyk token available - running Snyk scan"
-          fi
-
-      - name: Run Snyk to check for vulnerabilities
-        if: steps.snyk-check.outputs.snyk_available == 'true'
-        uses: snyk/actions/python@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high
-
-      - name: Create empty SARIF file if Snyk was skipped
-        if: steps.snyk-check.outputs.snyk_available == 'false'
-        run: |
-          cat > snyk.sarif << 'EOF'
-          {
-            "version": "2.1.0",
-            "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
-            "runs": [
-              {
-                "tool": {
-                  "driver": {
-                    "name": "Snyk",
-                    "version": "skipped"
-                  }
-                },
-                "results": []
-              }
-            ]
-          }
-          EOF
-
-      - name: Upload Snyk results to GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: snyk.sarif
+  # Snyk dependency check disabled - requires SNYK_TOKEN secret configuration
+  # Dependency security is covered by Safety tool in main security-scan job
+  # To enable: Add SNYK_TOKEN secret in repository settings and uncomment below
+  #
+  # dependency-check:
+  #   name: Dependency Security Check
+  #   runs-on: ubuntu-latest
+  #   if: >
+  #     github.event.inputs.scan_type == 'safety' ||
+  #     github.event.inputs.scan_type == 'all' ||
+  #     github.event.inputs.scan_type == ''
+  #
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Run Snyk to check for vulnerabilities
+  #       uses: snyk/actions/python@master
+  #       continue-on-error: true
+  #       env:
+  #         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+  #       with:
+  #         args: --severity-threshold=high
+  #
+  #     - name: Upload Snyk results to GitHub Code Scanning
+  #       uses: github/codeql-action/upload-sarif@v3
+  #       if: always()
+  #       with:
+  #         sarif_file: snyk.sarif
