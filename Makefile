@@ -23,7 +23,7 @@ LOAD_BOOTSTRAP_CREDS = $(CLEAR_AWS_ENV) && set -a && source .secrets && set +a
         bootstrap-check bootstrap-create bootstrap-destroy bootstrap-fix bootstrap-switch bootstrap-reset-help bootstrap-root-help credential-info \
         init plan apply destroy clean credentials setup-github rotate-keys \
         state-show state-pull state-backup state-import \
-        format lint type-check security pylance-check markdown-lint markdown-fix yaml-lint yaml-fix validate \
+        format lint type-check security pylance-check markdown-lint markdown-fix yaml-lint yaml-fix validate drift-detect \
         test test-workflow test-infrastructure test-act test-local \
         full-test full-test-help \
         dev-deploy dev-clean status clean-local \
@@ -88,6 +88,7 @@ help:
 	@echo "  make yaml-lint     Lint YAML files with yamllint"
 	@echo "  make yaml-fix      Validate YAML files (no auto-fix available)"
 	@echo "  make validate      Validate terraform configuration and Python code"
+	@echo "  make drift-detect  Detect drift between AWS state and Terraform configuration"
 	@echo ""
 	@echo "🛠️ DEVELOPMENT WORKFLOW:"
 	@echo "  make dev-deploy    Full local development deployment (clean slate)"
@@ -507,6 +508,15 @@ validate: init security format lint type-check pylance-check markdown-lint yaml-
 	@echo "🏗️  Testing infrastructure health..."
 	@$(MAKE) test-infrastructure
 	@echo "✅ All validations passed!"
+
+# Detect drift between AWS state and Terraform configuration
+drift-detect:
+	@echo "🔍 Detecting drift between AWS and Terraform..."
+	@if [ -f .secrets ]; then \
+		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/drift_detection.py; \
+	else \
+		$(CLEAR_AWS_ENV) && python3 scripts/drift_detection.py; \
+	fi
 
 # Plan infrastructure changes
 plan: validate

@@ -345,6 +345,45 @@ resource "aws_iam_policy" "developer_extended_policy" {
           "sqs:PurgeQueue"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "Route53DNSPermissions"
+        Effect = "Allow"
+        Action = [
+          "route53:ListHostedZones",
+          "route53:ListHostedZonesByName",
+          "route53:GetHostedZone",
+          "route53:ListResourceRecordSets",
+          "route53:GetChange",
+          "route53:ChangeResourceRecordSets"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "Route53RecordManagement"
+        Effect = "Allow"
+        Action = [
+          "route53:ChangeResourceRecordSets"
+        ]
+        Resource = "arn:aws:route53:::hostedzone/*"
+        Condition = {
+          "ForAllValues:StringLike" = {
+            "route53:RRType" = [
+              "A",
+              "AAAA",
+              "CNAME",
+              "TXT",
+              "MX",
+              "SRV"
+            ]
+          }
+          "ForAnyValue:StringLike" = {
+            "route53:RRName" = [
+              "*.apps.cvideo.click",
+              "apps.cvideo.click"
+            ]
+          }
+        }
       }
     ]
   })
