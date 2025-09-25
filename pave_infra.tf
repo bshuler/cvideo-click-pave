@@ -148,7 +148,8 @@ resource "aws_iam_user_policy" "developer_comprehensive_policy" {
           "cloudformation:ExecuteChangeSet",
           "cloudformation:CancelUpdateStack",
           "cloudformation:ContinueUpdateRollback",
-          "cloudformation:ValidateTemplate"
+          "cloudformation:ValidateTemplate",
+          "cloudformation:GetTemplateSummary"
         ]
         Resource = "*"
       },
@@ -328,6 +329,17 @@ resource "aws_iam_policy" "developer_extended_policy" {
           "iam:ListPolicyVersions"
         ]
         Resource = "arn:aws:iam::*:policy/${local.project_name}-*"
+      },
+      {
+        Sid    = "SQSPermissions"
+        Effect = "Allow"
+        Action = [
+          "sqs:CreateQueue",
+          "sqs:DeleteQueue",
+          "sqs:GetQueueAttributes",
+          "sqs:SetQueueAttributes"
+        ]
+        Resource = "*"
       }
     ]
   })

@@ -21,7 +21,7 @@ LOAD_BOOTSTRAP_CREDS = $(CLEAR_AWS_ENV) && set -a && source .secrets && set +a
 # ==============================================================================
 .PHONY: help \
         bootstrap-check bootstrap-create bootstrap-destroy bootstrap-fix bootstrap-switch bootstrap-reset-help bootstrap-root-help credential-info \
-        init plan apply destroy clean credentials setup-github \
+        init plan apply destroy clean credentials setup-github rotate-keys \
         state-show state-pull state-backup state-import \
         format lint type-check security pylance-check markdown-lint markdown-fix yaml-lint yaml-fix validate \
         test test-workflow test-infrastructure test-act test-local \
@@ -61,6 +61,7 @@ help:
 	@echo ""
 	@echo "🔑 CREDENTIAL & SECRETS MANAGEMENT:"
 	@echo "  make credentials       Generate credential template files"
+	@echo "  make rotate-keys       Rotate compromised AWS access keys (security incident response)"
 	@echo "  make setup-github      Automatically set GitHub secrets from .secrets (bootstrap user)"
 	@echo ""
 	@echo "🗄️ STATE MANAGEMENT (S3 Remote Backend):"
@@ -625,6 +626,37 @@ credentials:
 	else \
 		$(CLEAR_AWS_ENV) && python3 scripts/credentials.py; \
 	fi
+
+# Rotate compromised AWS access keys (Security Incident Response)
+rotate-keys:
+	@echo "🚨 AWS ACCESS KEY ROTATION - Security Incident Response"
+	@echo "======================================================="
+	@echo "⚠️  This will create new access keys and deactivate compromised ones"
+	@echo ""
+	@if [ -z "$(COMPROMISED_KEY)" ]; then \
+		echo "❌ Error: COMPROMISED_KEY parameter is required"; \
+		echo "Usage: make rotate-keys COMPROMISED_KEY=AKIATXIZHCB6R3RI7XV4"; \
+		exit 1; \
+	fi
+	@if [ ! -f .secrets ]; then \
+		echo "❌ Bootstrap credentials not found. Cannot rotate keys without admin access."; \
+		echo "💡 Ensure .secrets file exists with bootstrap user credentials"; \
+		exit 1; \
+	fi
+	@echo "🔍 Using bootstrap credentials to rotate developer keys..."
+	@echo "🚨 Compromised key to deactivate: $(COMPROMISED_KEY)"
+	@if [ "$(YES)" = "1" ]; then \
+		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/rotate_keys.py --compromised-key $(COMPROMISED_KEY) --skip-confirm; \
+	else \
+		$(LOAD_BOOTSTRAP_CREDS) && python3 scripts/rotate_keys.py --compromised-key $(COMPROMISED_KEY); \
+	fi
+	@echo ""
+	@echo "🎉 Key rotation completed! Next steps:"
+	@echo "1. Run: make validate"
+	@echo "2. Test infrastructure access"
+	@echo "3. Check CloudTrail logs for unauthorized activity"
+	@echo "4. Remove quarantine policy from developer user"
+	@echo "5. Delete compromised key after verification"
 
 # Automatically set GitHub secrets using bootstrap credentials
 setup-github:
