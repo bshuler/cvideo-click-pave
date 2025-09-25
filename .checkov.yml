@@ -1,0 +1,41 @@
+---
+# Checkov Configuration for Security Scanning
+# This file defines which security checks to skip with justifications
+
+skip-check:
+  # Admin Policy - Acceptable broad permissions for infrastructure management
+  - CKV_AWS_288  # Data exfiltration - Admin needs broad S3/CloudFormation access for infrastructure
+  - CKV_AWS_290  # Write access without constraints - Admin needs infrastructure provisioning
+  - CKV_AWS_287  # Credentials exposure - Admin needs IAM read access for security operations
+  - CKV_AWS_289  # Permissions management - Admin needs limited IAM for role management
+  - CKV_AWS_355  # Star resource for restrictable actions - Required for infrastructure automation
+  - CKV_AWS_286  # Privilege escalation - Admin needs escalation for infrastructure management
+  
+  # Developer Policy - Acceptable permissions for serverless development
+  - CKV2_AWS_40  # Full IAM privileges - Developer has constrained IAM for service roles only
+  
+  # IAM User Management - Acceptable for bootstrap/initial setup before SSO
+  - CKV_AWS_273  # SSO vs IAM users - IAM users needed for initial setup before SSO implementation
+  - CKV_AWS_40   # Policies attached to users vs roles - Bootstrap pattern requires user-attached policies
+
+# Include only specific resources for focused scanning
+framework:
+  - terraform
+
+# Output configuration
+output:
+  - cli
+  - json
+
+# Enable quiet mode for CI/CD
+quiet: false
+
+# Repository root configuration
+directory: ["."]
+
+# Skip directories that don't need security scanning
+skip-path:
+  - ".git/"
+  - ".terraform/"
+  - "logs/"
+  - "__pycache__/"

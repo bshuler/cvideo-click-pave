@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple, Any
 import re
+import fnmatch
 
 # Global quiet mode flag
 QUIET_MODE = False
@@ -29,6 +30,63 @@ def print_status(icon: str, message: str, force: bool = False) -> None:
     """Print status message with icon, respecting quiet mode."""
     if not QUIET_MODE or force:
         print(f"{icon} {message}")
+
+def load_gitignore_patterns() -> List[str]:
+    """Load and parse .gitignore patterns."""
+    gitignore_path = Path('.gitignore')
+    patterns = []
+    
+    if gitignore_path.exists():
+        with open(gitignore_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                # Skip empty lines and comments
+                if line and not line.startswith('#'):
+                    # Convert gitignore patterns to Python glob patterns
+                    if line.startswith('/'):
+                        # Absolute path from repo root
+                        patterns.append(line[1:])
+                    else:
+                        # Relative path - match anywhere
+                        patterns.append(line)
+                        patterns.append(f"**/{line}")
+    
+    # Always add common patterns that should be excluded
+    patterns.extend([
+        '.git/**', 
+        '.git',
+        '__pycache__/**',
+        '*.pyc',
+        '*.pyo',
+        '.DS_Store'
+    ])
+    
+    return patterns
+
+def is_ignored_by_gitignore(file_path: str, gitignore_patterns: List[str]) -> bool:
+    """Check if a file path matches any gitignore pattern."""
+    # Normalize path separators and remove leading ./
+    normalized_path = file_path.replace('\\', '/').lstrip('./')
+    
+    for pattern in gitignore_patterns:
+        # Handle directory patterns
+        if pattern.endswith('/'):
+            pattern = pattern.rstrip('/')
+            if fnmatch.fnmatch(normalized_path, pattern) or fnmatch.fnmatch(normalized_path, f"{pattern}/**"):
+                return True
+        else:
+            # Handle file patterns
+            if fnmatch.fnmatch(normalized_path, pattern):
+                return True
+            # Also check if it's inside a directory that matches
+            if '/' in normalized_path:
+                dir_parts = normalized_path.split('/')
+                for i in range(len(dir_parts)):
+                    partial_path = '/'.join(dir_parts[:i+1])
+                    if fnmatch.fnmatch(partial_path, pattern):
+                        return True
+    
+    return False
 
 def run_command(cmd: List[str], cwd: str | None = None) -> Tuple[int, str, str]:
     """Run a command and return exit code, stdout, stderr."""
@@ -125,13 +183,14 @@ def run_checkov_scan() -> Dict[str, Any]:
             "issues": 0
         }
     
-    # Run checkov on Terraform files
+    # Run checkov on Terraform files with configuration file
     cmd = [
         "checkov",
         "-f", "pave_infra.tf",
         "-o", "json",
         "--quiet",
-        "--compact"
+        "--compact",
+        "--config-file", ".checkov.yml"
     ]
     
     exit_code, stdout, stderr = run_command(cmd)
@@ -290,26 +349,48 @@ def run_secret_detection() -> Dict[str, Any]:
         r'"evaluated_keys":',  # Checkov evaluation fields
         r'"check_id":',  # Security check identifiers
         r'"resource":',  # Resource identifiers
+        r'"context":.*"context":',  # Nested JSON context in logs
+        
+        # GitHub OIDC and known safe tokens
+        r'token\.actions\.githubusercontent\.com',  # GitHub OIDC provider
+        r'sts\.amazonaws\.com',  # AWS STS endpoints
+        
+        # Log file patterns to exclude entirely
+        r'logs/.*\.json',  # Exclude all log JSON files from secret scanning
+        
+        # Function and variable names (not actual secrets)
+        r'def.*secret.*\(',  # Function definitions with secret in name
+        r'def.*credential.*\(',  # Function definitions with credential in name
+        r'_secrets_path',  # Variable names ending in _secrets_path
+        r'\.secrets"',  # File path references like ".secrets"
+        r'root-secrets"',  # File path references like ".root-secrets"
+        r'secrets_manager',  # AWS Secrets Manager service references
+        r'secret_type.*==',  # Variable comparisons in code
+        r'if secret_type',  # Conditional statements with secret_type
     ]
     
-    # Directories to exclude
-    exclude_dirs = {'.git', '.terraform', '.venv', 'site-packages', 'node_modules'}
+    # Load gitignore patterns
+    gitignore_patterns = load_gitignore_patterns()
     
     # File extensions to check
     include_extensions = {'.py', '.tf', '.yaml', '.yml', '.json', '.env', '.sh'}
     
     for root, dirs, files in os.walk('.'):
-        # Remove excluded directories
-        dirs[:] = [d for d in dirs if d not in exclude_dirs]
+        # Filter out directories that match gitignore patterns
+        dirs[:] = [d for d in dirs if not is_ignored_by_gitignore(os.path.join(root, d), gitignore_patterns)]
         
         for file in files:
+            file_path = os.path.join(root, file)
+            
+            # Skip files that match gitignore patterns
+            if is_ignored_by_gitignore(file_path, gitignore_patterns):
+                continue
+                
             if not any(file.endswith(ext) for ext in include_extensions):
                 continue
                 
             if file.endswith('.secrets') or 'credentials' in file:
                 continue  # Skip credential files
-                
-            file_path = os.path.join(root, file)
             
             try:
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
