@@ -130,79 +130,197 @@ resource "aws_iam_user_policy" "developer_comprehensive_policy" {
     Version = "2012-10-17"
     Statement = [
       {
+        Sid    = "CloudFormationPermissions"
         Effect = "Allow"
         Action = [
-          # Serverless development
-          "cloudformation:*",
-          "lambda:*",
-          "apigateway:*",
-          "logs:*",
-          "dynamodb:*",
-          # IAM read permissions for infrastructure testing
+          "cloudformation:CreateStack",
+          "cloudformation:UpdateStack",
+          "cloudformation:DeleteStack",
+          "cloudformation:DescribeStacks",
+          "cloudformation:DescribeStackEvents",
+          "cloudformation:DescribeStackResources",
+          "cloudformation:GetTemplate",
+          "cloudformation:ListStacks",
+          "cloudformation:ListStackResources",
+          "cloudformation:CreateChangeSet",
+          "cloudformation:DeleteChangeSet",
+          "cloudformation:DescribeChangeSet",
+          "cloudformation:ExecuteChangeSet",
+          "cloudformation:CancelUpdateStack",
+          "cloudformation:ContinueUpdateRollback",
+          "cloudformation:ValidateTemplate"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "LambdaPermissions"
+        Effect = "Allow"
+        Action = [
+          "lambda:CreateFunction",
+          "lambda:DeleteFunction",
+          "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
+          "lambda:ListFunctions",
+          "lambda:UpdateFunctionCode",
+          "lambda:UpdateFunctionConfiguration",
+          "lambda:InvokeFunction",
+          "lambda:AddPermission",
+          "lambda:RemovePermission",
+          "lambda:GetPolicy",
+          "lambda:PutFunctionConcurrency",
+          "lambda:DeleteFunctionConcurrency",
+          "lambda:TagResource",
+          "lambda:UntagResource"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "APIGatewayPermissions"
+        Effect = "Allow"
+        Action = [
+          "apigateway:GET",
+          "apigateway:POST",
+          "apigateway:PUT",
+          "apigateway:DELETE",
+          "apigateway:PATCH"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Extended developer policy for additional permissions
+resource "aws_iam_policy" "developer_extended_policy" {
+  name        = "DeveloperExtendedPolicy"
+  description = "Extended permissions for developer user - S3, IAM, logs, and state management"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "S3BucketPermissions"
+        Effect = "Allow"
+        Action = [
+          "s3:CreateBucket",
+          "s3:DeleteBucket",
+          "s3:ListBucket",
+          "s3:GetBucketLocation",
+          "s3:GetBucketVersioning",
+          "s3:PutBucketVersioning",
+          "s3:GetBucketAcl",
+          "s3:PutBucketAcl",
+          "s3:GetBucketCORS",
+          "s3:PutBucketCORS",
+          "s3:GetBucketWebsite",
+          "s3:PutBucketWebsite",
+          "s3:DeleteBucketWebsite",
+          "s3:GetBucketNotification",
+          "s3:PutBucketNotification",
+          "s3:GetBucketTagging",
+          "s3:PutBucketTagging",
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:GetObjectVersion",
+          "s3:DeleteObjectVersion"
+        ]
+        Resource = [
+          "arn:aws:s3:::aws-sam-cli-managed-*",
+          "arn:aws:s3:::aws-sam-cli-managed-*/*",
+          "arn:aws:s3:::cvideo-*",
+          "arn:aws:s3:::cvideo-*/*",
+          "arn:aws:s3:::${local.project_name}-*",
+          "arn:aws:s3:::${local.project_name}-*/*"
+        ]
+      },
+      {
+        Sid    = "IAMRolePermissions"
+        Effect = "Allow"
+        Action = [
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:GetRole",
+          "iam:PassRole",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:GetRolePolicy",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
+          "iam:TagRole",
+          "iam:UntagRole"
+        ]
+        Resource = [
+          "arn:aws:iam::*:role/cvideo-click-api-*",
+          "arn:aws:iam::*:role/aws-sam-cli-managed-*"
+        ]
+      },
+      {
+        Sid    = "CloudWatchLogsPermissions"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:GetLogEvents",
+          "logs:FilterLogEvents",
+          "logs:DeleteLogGroup",
+          "logs:DeleteLogStream",
+          "logs:PutRetentionPolicy",
+          "logs:TagLogGroup",
+          "logs:UntagLogGroup"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "TerraformStatePermissions"
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = [
+          "arn:aws:s3:::pave-tf-state-bucket-us-east-1",
+          "arn:aws:s3:::pave-tf-state-bucket-us-east-1/*"
+        ]
+      },
+      {
+        Sid    = "TerraformLockPermissions"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem"
+        ]
+        Resource = "arn:aws:dynamodb:us-east-1:*:table/terraform-locks"
+      },
+      {
+        Sid    = "DynamoDBPermissions"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:*"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "IAMReadPermissions"
+        Effect = "Allow"
+        Action = [
           "iam:Get*",
           "iam:List*"
         ]
         Resource = "*"
       },
       {
+        Sid    = "IAMPolicyManagement"
         Effect = "Allow"
         Action = [
-          # S3 object management
-          "s3:GetObject*",
-          "s3:PutObject*",
-          "s3:DeleteObject*",
-          "s3:ListBucket"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          # S3 bucket management for application data only
-          "s3:CreateBucket",
-          "s3:DeleteBucket",
-          "s3:GetBucketLocation",
-          "s3:GetBucketVersioning",
-          "s3:PutBucketVersioning"
-        ]
-        Resource = [
-          "arn:aws:s3:::cvideo-*",
-          "arn:aws:s3:::${local.project_name}-*"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          # Limited IAM for service roles only
-          "iam:CreateRole",
-          "iam:GetRole",
-          "iam:PassRole",
-          "iam:AttachRolePolicy",
-          "iam:DetachRolePolicy",
-          "iam:PutRolePolicy",
-          "iam:DeleteRolePolicy"
-        ]
-        Resource = [
-          "arn:aws:iam::*:role/lambda-*",
-          "arn:aws:iam::*:role/apigateway-*",
-          "arn:aws:iam::*:role/*-execution-role",
-          "arn:aws:iam::*:role/${local.project_name}-*"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          # General IAM read permissions needed for infrastructure testing
-          "iam:ListRoles",
-          "iam:ListPolicies",
-          "iam:GetAccountSummary"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          # IAM policy management for service roles
           "iam:CreatePolicy",
           "iam:GetPolicy",
           "iam:ListPolicies",
@@ -213,6 +331,12 @@ resource "aws_iam_user_policy" "developer_comprehensive_policy" {
       }
     ]
   })
+}
+
+# Attach the extended policy to the developer user
+resource "aws_iam_user_policy_attachment" "developer_extended_policy" {
+  user       = aws_iam_user.developer_user.name
+  policy_arn = aws_iam_policy.developer_extended_policy.arn
 }
 
 # Keep EC2 read-only access for viewing instances
