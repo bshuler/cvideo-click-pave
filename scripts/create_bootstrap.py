@@ -7,7 +7,11 @@ management in AWS. It handles creating, updating, and cleaning up the bootstrap
 infrastructure that Terraform itself will then manage.
 
 Key features:
-- Creates bootstrap IAM user with minimal required permissions
+- Creates bootstrap IAM user with comprehensive permissions including:
+  * Route53: Full hosted zone, DNSSEC, and query logging management
+  * KMS: Complete key lifecycle management for DNSSEC signing keys
+  * CloudWatch Logs: Resource policies and log group management
+  * IAM, S3, Lambda, EC2: Full access for infrastructure deployment
 - Sets up S3 bucket for Terraform state with proper versioning and encryption
 - Stores credentials securely in AWS Secrets Manager
 - Provides comprehensive error handling and status reporting
@@ -18,6 +22,10 @@ The script implements safe practices:
 - Uses secure credential storage with proper IAM policies
 - Implements proper error handling for all AWS operations
 - Provides clear status messaging throughout the process
+- Matches permissions established through deployment experience
+
+Updated: 2025-09-25 - Added Route53 DNSSEC, KMS, and CloudWatch Logs permissions
+based on infrastructure deployment requirements discovered during Route53 setup.
 
 Usage: python scripts/create_bootstrap.py
 """
@@ -64,10 +72,22 @@ def print_status(emoji: str, message: str) -> None:
 
 
 def create_bootstrap_policy(iam_client):
-    """Create the PaveBootstrapPolicy with proper permissions."""
+    """Create the PaveBootstrapPolicy with comprehensive permissions.
+
+    This policy includes all permissions discovered through deployment experience:
+    - Route53: Full hosted zone, DNSSEC, and query logging management
+    - KMS: Complete key lifecycle management for DNSSEC signing keys
+    - CloudWatch Logs: Resource policies and log group management
+    - IAM: Full access except for protected bootstrap resources
+    - S3, Lambda, EC2: Full access for infrastructure deployment
+    - Supporting services: STS, CloudWatch, API Gateway, CodeBuild/Pipeline/Deploy
+
+    Updated to match BootstrapExtendedPolicy permissions from pave_infra.tf
+    """
     policy_name = "PaveBootstrapPolicy"
 
-    # Comprehensive bootstrap policy document
+    # Comprehensive bootstrap policy document with structured permissions
+    # Based on the BootstrapExtendedPolicy established through deployment experience
     policy_document = {
         "Version": "2012-10-17",
         "Statement": [
@@ -109,6 +129,74 @@ def create_bootstrap_policy(iam_client):
                 ],
             },
             {
+                "Sid": "Route53Permissions",
+                "Effect": "Allow",
+                "Action": [
+                    "route53:CreateHostedZone",
+                    "route53:DeleteHostedZone",
+                    "route53:GetHostedZone",
+                    "route53:ListHostedZones",
+                    "route53:ChangeResourceRecordSets",
+                    "route53:GetChange",
+                    "route53:ListResourceRecordSets",
+                    "route53:CreateKeySigningKey",
+                    "route53:DeleteKeySigningKey",
+                    "route53:ActivateKeySigningKey",
+                    "route53:DeactivateKeySigningKey",
+                    "route53:EnableHostedZoneDNSSEC",
+                    "route53:DisableHostedZoneDNSSEC",
+                    "route53:GetDNSSEC",
+                    "route53:CreateQueryLoggingConfig",
+                    "route53:DeleteQueryLoggingConfig",
+                    "route53:GetQueryLoggingConfig",
+                    "route53:ChangeTagsForResource",
+                    "route53:ListTagsForResource",
+                ],
+                "Resource": "*",
+            },
+            {
+                "Sid": "KMSPermissions",
+                "Effect": "Allow",
+                "Action": [
+                    "kms:CreateKey",
+                    "kms:DeleteKey",
+                    "kms:DescribeKey",
+                    "kms:GetKeyPolicy",
+                    "kms:PutKeyPolicy",
+                    "kms:GetPublicKey",
+                    "kms:Sign",
+                    "kms:TagResource",
+                    "kms:UntagResource",
+                    "kms:CreateAlias",
+                    "kms:DeleteAlias",
+                    "kms:ListAliases",
+                    "kms:ListKeys",
+                    "kms:EnableKeyRotation",
+                    "kms:DisableKeyRotation",
+                    "kms:GetKeyRotationStatus",
+                    "kms:ListResourceTags",
+                    "kms:ScheduleKeyDeletion",
+                    "kms:CancelKeyDeletion",
+                ],
+                "Resource": "*",
+            },
+            {
+                "Sid": "CloudWatchLogsPermissions",
+                "Effect": "Allow",
+                "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:DeleteLogGroup",
+                    "logs:DescribeLogGroups",
+                    "logs:PutRetentionPolicy",
+                    "logs:TagLogGroup",
+                    "logs:UntagLogGroup",
+                    "logs:PutResourcePolicy",
+                    "logs:DeleteResourcePolicy",
+                    "logs:DescribeResourcePolicies",
+                ],
+                "Resource": "*",
+            },
+            {
                 "Sid": "FullS3Access",
                 "Effect": "Allow",
                 "Action": ["s3:*"],
@@ -135,7 +223,7 @@ def create_bootstrap_policy(iam_client):
             {
                 "Sid": "SupportingServices",
                 "Effect": "Allow",
-                "Action": ["sts:*", "logs:*", "cloudwatch:*", "apigateway:*"],
+                "Action": ["sts:*", "cloudwatch:*", "apigateway:*"],
                 "Resource": "*",
             },
         ],
@@ -146,10 +234,12 @@ def create_bootstrap_policy(iam_client):
         response = iam_client.create_policy(
             PolicyName=policy_name,
             PolicyDocument=json.dumps(policy_document),
-            Description="Bootstrap policy for pave infrastructure management",
+            Description="Comprehensive bootstrap policy for pave infrastructure management including Route53 DNSSEC, KMS key management, and CloudWatch logging",
             Tags=[
                 {"Key": "ProtectedResource", "Value": "true"},
                 {"Key": "Purpose", "Value": "PaveBootstrap"},
+                {"Key": "Version", "Value": "2.0"},
+                {"Key": "LastUpdated", "Value": "2025-09-25"},
             ],
         )
         policy_arn = response["Policy"]["Arn"]

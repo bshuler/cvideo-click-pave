@@ -37,6 +37,100 @@ data "aws_iam_user" "bootstrap_user" {
   user_name = "bootstrap-user"
 }
 
+# Data sources for account ID and region
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+# Extended bootstrap policy for Route 53 and KMS operations
+resource "aws_iam_policy" "bootstrap_extended_policy" {
+  name        = "BootstrapExtendedPolicy"
+  description = "Extended policy for bootstrap user to deploy Route 53 and KMS infrastructure"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Route53Permissions"
+        Effect = "Allow"
+        Action = [
+          "route53:CreateHostedZone",
+          "route53:DeleteHostedZone",
+          "route53:GetHostedZone",
+          "route53:ListHostedZones",
+          "route53:ChangeResourceRecordSets",
+          "route53:GetChange",
+          "route53:ListResourceRecordSets",
+          "route53:CreateKeySigningKey",
+          "route53:DeleteKeySigningKey",
+          "route53:ActivateKeySigningKey",
+          "route53:DeactivateKeySigningKey",
+          "route53:EnableHostedZoneDNSSEC",
+          "route53:DisableHostedZoneDNSSEC",
+          "route53:GetDNSSEC",
+          "route53:CreateQueryLoggingConfig",
+          "route53:DeleteQueryLoggingConfig",
+          "route53:GetQueryLoggingConfig",
+          "route53:ChangeTagsForResource",
+          "route53:ListTagsForResource"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "KMSPermissions"
+        Effect = "Allow"
+        Action = [
+          "kms:CreateKey",
+          "kms:DeleteKey",
+          "kms:DescribeKey",
+          "kms:GetKeyPolicy",
+          "kms:PutKeyPolicy",
+          "kms:GetPublicKey",
+          "kms:Sign",
+          "kms:TagResource",
+          "kms:UntagResource",
+          "kms:CreateAlias",
+          "kms:DeleteAlias",
+          "kms:ListAliases",
+          "kms:ListKeys",
+          "kms:EnableKeyRotation",
+          "kms:DisableKeyRotation",
+          "kms:GetKeyRotationStatus",
+          "kms:ListResourceTags",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "CloudWatchLogsPermissions"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:DeleteLogGroup",
+          "logs:DescribeLogGroups",
+          "logs:PutRetentionPolicy",
+          "logs:TagLogGroup",
+          "logs:UntagLogGroup"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "bootstrap-extended-policy"
+    Project     = local.project_name
+    Environment = local.environment
+    Purpose     = "Extended bootstrap permissions for infrastructure deployment"
+  }
+}
+
+# Attach the extended policy to the bootstrap user
+resource "aws_iam_user_policy_attachment" "bootstrap_extended_policy" {
+  user       = data.aws_iam_user.bootstrap_user.user_name
+  policy_arn = aws_iam_policy.bootstrap_extended_policy.arn
+}
+
 # Custom policy for admin user - excludes bootstrap resource management
 resource "aws_iam_policy" "admin_policy" {
   name        = "PaveAdminPolicy"
@@ -57,13 +151,25 @@ resource "aws_iam_policy" "admin_policy" {
           "dynamodb:*",
           "ec2:*",
 
+          # Route 53 DNS management
+          "route53:*",
+          "route53:GetDNSSEC",
+          "route53:EnableHostedZoneDNSSEC",
+          "route53:DisableHostedZoneDNSSEC",
+
+          # KMS key management
+          "kms:*",
+
           # Monitoring and debugging
           "cloudwatch:*",
           "xray:*",
 
-          # Security and compliance (read-only)
+          # Security and compliance
           "iam:Get*",
           "iam:List*",
+          "iam:CreatePolicy",
+          "iam:AttachUserPolicy",
+          "iam:DetachUserPolicy",
           "sts:AssumeRole",
           "sts:GetCallerIdentity",
 
@@ -569,4 +675,240 @@ resource "aws_iam_role_policy_attachment" "cicd_s3_specific_access" {
 # Output the CI/CD role ARN for GitHub Actions
 output "cicd_role_arn" {
   value = aws_iam_role.cicd_role.arn
+}
+
+# Route 53 hosted zone for apps.cvideo.click subdomain
+resource "aws_route53_zone" "apps_subdomain" {
+  name    = "apps.cvideo.click"
+  comment = "Hosted zone for applications under cvideo.click domain"
+
+  tags = {
+    Name        = "apps.cvideo.click"
+    Project     = local.project_name
+    Environment = local.environment
+    Purpose     = "Application subdomain DNS management"
+  }
+}
+
+# Enable DNSSEC signing for the hosted zone
+resource "aws_route53_key_signing_key" "apps_subdomain_ksk" {
+  hosted_zone_id             = aws_route53_zone.apps_subdomain.id
+  key_management_service_arn = aws_kms_key.dnssec_key.arn
+  name                       = "apps_subdomain_ksk"
+}
+
+resource "aws_route53_hosted_zone_dnssec" "apps_subdomain_dnssec" {
+  depends_on     = [aws_route53_key_signing_key.apps_subdomain_ksk]
+  hosted_zone_id = aws_route53_zone.apps_subdomain.id
+}
+
+# KMS key for DNSSEC signing
+resource "aws_kms_key" "dnssec_key" {
+  description              = "KMS key for Route 53 DNSSEC signing"
+  customer_master_key_spec = "ECC_NIST_P256"
+  key_usage                = "SIGN_VERIFY"
+  deletion_window_in_days  = 7
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root",
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/bootstrap-user"
+          ]
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow Route53 DNSSEC Service"
+        Effect = "Allow"
+        Principal = {
+          Service = "dnssec-route53.amazonaws.com"
+        }
+        Action = [
+          "kms:DescribeKey",
+          "kms:GetPublicKey",
+          "kms:Sign"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "apps.cvideo.click-dnssec-key"
+    Project     = local.project_name
+    Environment = local.environment
+    Purpose     = "Route 53 DNSSEC signing"
+  }
+}
+
+resource "aws_kms_alias" "dnssec_key_alias" {
+  name          = "alias/${local.project_name}-dnssec-key"
+  target_key_id = aws_kms_key.dnssec_key.key_id
+}
+
+# KMS key for CloudWatch log encryption
+resource "aws_kms_key" "cloudwatch_logs_key" {
+  description             = "KMS key for CloudWatch log encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnEquals = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:us-east-1:${data.aws_caller_identity.current.account_id}:log-group:/aws/route53/${aws_route53_zone.apps_subdomain.name}"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "apps.cvideo.click-logs-key"
+    Project     = local.project_name
+    Environment = local.environment
+    Purpose     = "CloudWatch logs encryption"
+  }
+}
+
+resource "aws_kms_alias" "cloudwatch_logs_key_alias" {
+  name          = "alias/${local.project_name}-logs-key"
+  target_key_id = aws_kms_key.cloudwatch_logs_key.key_id
+}
+
+# CloudWatch Log Group for DNS query logging
+resource "aws_cloudwatch_log_group" "route53_query_logs" {
+  name              = "/aws/route53/${aws_route53_zone.apps_subdomain.name}"
+  retention_in_days = 365 # 1 year retention for security compliance
+  kms_key_id        = aws_kms_key.cloudwatch_logs_key.arn
+
+  tags = {
+    Name        = "apps.cvideo.click-dns-logs"
+    Project     = local.project_name
+    Environment = local.environment
+    Purpose     = "Route 53 DNS query logging"
+  }
+}
+
+# CloudWatch log group resource policy for Route 53 query logging
+resource "aws_cloudwatch_log_resource_policy" "route53_query_log_policy" {
+  policy_document = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "route53.amazonaws.com"
+        }
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "${aws_cloudwatch_log_group.route53_query_logs.arn}:*"
+        Condition = {
+          ArnLike = {
+            "aws:SourceArn" = "arn:aws:route53:::hostedzone/${aws_route53_zone.apps_subdomain.zone_id}"
+          }
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      }
+    ]
+  })
+  policy_name = "route53-query-logging-policy"
+}
+
+# Route 53 query logging configuration
+resource "aws_route53_query_log" "apps_subdomain_query_log" {
+  depends_on               = [aws_cloudwatch_log_group.route53_query_logs, aws_cloudwatch_log_resource_policy.route53_query_log_policy]
+  cloudwatch_log_group_arn = aws_cloudwatch_log_group.route53_query_logs.arn
+  zone_id                  = aws_route53_zone.apps_subdomain.zone_id
+}
+
+# NOTE: Parent domain NS record delegation commented out - requires manual setup
+# After deployment, add NS records to cvideo.click pointing to apps.cvideo.click nameservers
+
+# Data source for the parent domain (cvideo.click)
+# data "aws_route53_zone" "parent_domain" {
+#   name         = "cvideo.click"
+#   private_zone = false
+# }
+
+# Create NS record in parent domain for the subdomain delegation
+# resource "aws_route53_record" "apps_subdomain_ns" {
+#   zone_id = data.aws_route53_zone.parent_domain.zone_id
+#   name    = "apps.cvideo.click"
+#   type    = "NS"
+#   ttl     = 300
+#
+#   records = aws_route53_zone.apps_subdomain.name_servers
+#
+#   depends_on = [aws_route53_zone.apps_subdomain]
+# }
+
+# Output the nameservers for the apps.cvideo.click hosted zone
+output "apps_subdomain_nameservers" {
+  value       = aws_route53_zone.apps_subdomain.name_servers
+  description = "Nameservers for apps.cvideo.click - add these as NS records in your parent domain"
+}
+
+# Output the hosted zone ID for reference
+output "apps_subdomain_zone_id" {
+  value       = aws_route53_zone.apps_subdomain.zone_id
+  description = "Route 53 hosted zone ID for apps.cvideo.click"
+}
+
+# Output DNSSEC status and key information
+output "apps_subdomain_dnssec_status" {
+  value       = aws_route53_hosted_zone_dnssec.apps_subdomain_dnssec.signing_status
+  description = "DNSSEC signing status for apps.cvideo.click hosted zone"
+}
+
+output "apps_subdomain_kms_key_id" {
+  value       = aws_kms_key.dnssec_key.key_id
+  description = "KMS key ID used for DNSSEC signing"
+}
+
+# Output query logging configuration
+output "apps_subdomain_query_log_group" {
+  value       = aws_cloudwatch_log_group.route53_query_logs.name
+  description = "CloudWatch log group for DNS query logging"
 }

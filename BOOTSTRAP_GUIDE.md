@@ -100,7 +100,11 @@ make bootstrap-create
 
 # This will:
 # - Create bootstrap-user with proper tags
-# - Create PaveBootstrapPolicy with full S3 permissions
+# - Create PaveBootstrapPolicy with comprehensive permissions:
+#   * Route53: Full hosted zone, DNSSEC, and query logging management
+#   * KMS: Complete key lifecycle management for DNSSEC signing keys
+#   * CloudWatch Logs: Resource policies and log group management
+#   * IAM, S3, Lambda, EC2: Full access for infrastructure deployment
 # - Create PaveBootstrapRole
 # - Generate new access keys
 # - Display the new credentials
