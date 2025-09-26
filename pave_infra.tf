@@ -27,6 +27,16 @@ locals {
   environment  = "main"
 }
 
+# SECURITY BOUNDARY DOCUMENTATION:
+# These require elevated permissions that developers shouldn't have:
+# - aws_route53_zone.apps_domain              # DNS delegation control
+# - aws_iam_role.lambda_execution_role         # Cross-service trust relationships  
+# - aws_iam_role.replication_role             # S3 service roles
+# - aws_iam_role_policy_attachment.*          # Policy management
+# - aws_kms_key.api_assets_key                # Master encryption keys
+# - aws_kms_key.api_assets_replica_key        # Cross-region encryption
+# - aws_kms_alias.*                           # KMS alias management
+
 # Reference existing S3 bucket created by bootstrap process
 data "aws_s3_bucket" "tf_state_bucket" {
   bucket = "pave-tf-state-bucket-us-east-1"
@@ -298,6 +308,9 @@ resource "aws_iam_user_policy" "developer_comprehensive_policy" {
 }
 
 # Extended developer policy for additional permissions
+# Grant developer-user additional permissions for existing resources:
+# - s3:GetBucketPolicy on existing buckets
+# - acm:ListTagsForCertificate on existing certificates
 resource "aws_iam_policy" "developer_extended_policy" {
   name        = "DeveloperExtendedPolicy"
   description = "Extended permissions for developer user - S3, IAM, logs, and state management"
@@ -326,6 +339,7 @@ resource "aws_iam_policy" "developer_extended_policy" {
           "s3:PutBucketNotification",
           "s3:GetBucketTagging",
           "s3:PutBucketTagging",
+          "s3:GetBucketPolicy",
           "s3:GetObject",
           "s3:PutObject",
           "s3:DeleteObject",
@@ -350,7 +364,8 @@ resource "aws_iam_policy" "developer_extended_policy" {
           "acm:RequestCertificate",
           "acm:DeleteCertificate",
           "acm:AddTagsToCertificate",
-          "acm:RemoveTagsFromCertificate"
+          "acm:RemoveTagsFromCertificate",
+          "acm:ListTagsForCertificate"
         ]
         Resource = "*"
       },
@@ -924,22 +939,4 @@ output "apps_subdomain_kms_key_id" {
 output "apps_subdomain_query_log_group" {
   value       = aws_cloudwatch_log_group.route53_query_logs.name
   description = "CloudWatch log group for DNS query logging"
-}
-
-# DynamoDB table for Terraform state locking
-resource "aws_dynamodb_table" "terraform_locks" {
-  name           = "terraform-locks"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-
-  tags = {
-    Name        = "terraform-locks"
-    Environment = "infrastructure"
-    Project     = local.project_name
-  }
 }
