@@ -352,7 +352,7 @@ resource "aws_iam_policy" "developer_extended_policy" {
           "acm:AddTagsToCertificate",
           "acm:RemoveTagsFromCertificate"
         ]
-        Resource = "arn:aws:acm:*:*:certificate/*"
+        Resource = "*"
       },
       {
         Sid    = "IAMRolePermissions"
