@@ -925,3 +925,21 @@ output "apps_subdomain_query_log_group" {
   value       = aws_cloudwatch_log_group.route53_query_logs.name
   description = "CloudWatch log group for DNS query logging"
 }
+
+# DynamoDB table for Terraform state locking
+resource "aws_dynamodb_table" "terraform_locks" {
+  name           = "terraform-locks"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "terraform-locks"
+    Environment = "infrastructure"
+    Project     = local.project_name
+  }
+}
