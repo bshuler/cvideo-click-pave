@@ -668,7 +668,7 @@ rotate-keys:
 	@echo "4. Remove quarantine policy from developer user"
 	@echo "5. Delete compromised key after verification"
 
-# Automatically set GitHub secrets using bootstrap credentials
+# Automatically set GitHub secrets using bootstrap credentials with validation
 setup-github:
 	@echo "🚀 Automatically setting up GitHub repository secrets..."
 	@if [ ! -f .secrets ]; then \
@@ -683,13 +683,29 @@ setup-github:
 	@AWS_ACCESS_KEY_ID=$$(grep "AWS_ACCESS_KEY_ID=" .secrets | cut -d'=' -f2); \
 	AWS_SECRET_ACCESS_KEY=$$(grep "AWS_SECRET_ACCESS_KEY=" .secrets | cut -d'=' -f2); \
 	AWS_REGION=$$(grep "AWS_REGION=" .secrets | cut -d'=' -f2 | head -1); \
-	echo "🔑 Setting AWS_ACCESS_KEY_ID (bootstrap user)..."; \
+	echo "� Validating credentials before sending to GitHub..."; \
+	IDENTITY_RESULT=$$(AWS_ACCESS_KEY_ID=$$AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$$AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION=$$AWS_REGION aws sts get-caller-identity 2>&1); \
+	if [ $$? -ne 0 ]; then \
+		echo "❌ Invalid AWS credentials in .secrets file:"; \
+		echo "$$IDENTITY_RESULT"; \
+		echo "💡 Run 'make bootstrap-create' to generate valid credentials"; \
+		exit 1; \
+	fi; \
+	USERNAME=$$(echo "$$IDENTITY_RESULT" | grep -o '"Arn": *"[^"]*"' | cut -d'"' -f4 | sed 's|.*/||'); \
+	if [ "$$USERNAME" != "bootstrap-user" ]; then \
+		echo "❌ Credentials in .secrets are not for bootstrap-user (found: $$USERNAME)"; \
+		echo "💡 Expected bootstrap-user credentials for GitHub Actions"; \
+		echo "💡 Run 'make bootstrap-create' to generate proper bootstrap credentials"; \
+		exit 1; \
+	fi; \
+	echo "✅ Credentials validated: $$USERNAME"; \
+	echo "�🔑 Setting AWS_ACCESS_KEY_ID (bootstrap user)..."; \
 	gh secret set AWS_ACCESS_KEY_ID --body "$$AWS_ACCESS_KEY_ID"; \
 	echo "🔒 Setting AWS_SECRET_ACCESS_KEY (bootstrap user)..."; \
 	gh secret set AWS_SECRET_ACCESS_KEY --body "$$AWS_SECRET_ACCESS_KEY"; \
 	echo "🌍 Setting AWS_REGION..."; \
 	gh secret set AWS_REGION --body "$$AWS_REGION"
-	@echo "✅ GitHub secrets configured successfully with bootstrap user credentials!"
+	@echo "✅ GitHub secrets configured successfully with validated bootstrap user credentials!"
 	@echo "📋 Verifying secrets..."
 	@gh secret list
 	@echo "🚀 You can now trigger the workflow with: gh workflow run terraform.yaml"
