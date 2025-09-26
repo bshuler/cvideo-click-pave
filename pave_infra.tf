@@ -342,6 +342,19 @@ resource "aws_iam_policy" "developer_extended_policy" {
         ]
       },
       {
+        Sid    = "ACMCertificatePermissions"
+        Effect = "Allow"
+        Action = [
+          "acm:ListCertificates",
+          "acm:DescribeCertificate",
+          "acm:RequestCertificate",
+          "acm:DeleteCertificate",
+          "acm:AddTagsToCertificate",
+          "acm:RemoveTagsFromCertificate"
+        ]
+        Resource = "arn:aws:acm:*:*:certificate/*"
+      },
+      {
         Sid    = "IAMRolePermissions"
         Effect = "Allow"
         Action = [
